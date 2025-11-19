@@ -1,0 +1,37 @@
+name: libdnf5
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  libdnf5:
+    name: "libdnf5"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Fedora latest"
+            image: "registry.fedoraproject.org/fedora:latest"
+          - name: "Fedora Rawhide"
+            image: "registry.fedoraproject.org/fedora:rawhide"
+
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v5
+
+      - name: "Install packages"
+        run: |
+          dnf --setopt install_weak_deps=False install -y \
+            cmake gcc gcc-c++ libdnf5-devel dnf5-devel
+
+      - name: "Build libdnf5 plugins"
+        run: |
+          mkdir build && cd build
+          cmake ../ -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
+          make
