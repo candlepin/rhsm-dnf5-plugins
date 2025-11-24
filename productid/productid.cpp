@@ -20,9 +20,7 @@ constexpr const char * attrs_value[] {
     "Automatically download productid certificates from Red Hat repositories."
 };
 
-
 #define PRODUCTDB_DIR "/var/lib/rhsm/"
-#define PRODUCTDB_FILE "/var/lib/rhsm/productid.json"
 
 constexpr const char * METADATA_TYPE_PRODUCTID = "productid";
 

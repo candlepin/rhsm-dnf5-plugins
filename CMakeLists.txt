@@ -24,3 +24,5 @@ endif()
 
 # libdnf5 plugins
 add_subdirectory("productid")
+
+enable_testing()
