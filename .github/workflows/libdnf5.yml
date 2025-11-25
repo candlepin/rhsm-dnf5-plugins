@@ -25,13 +25,19 @@ jobs:
       - name: "Checkout repository"
         uses: actions/checkout@v6
 
-      - name: "Install packages"
+      # TODO: Replace this with 'dnf builddep', when .spec file is available
+      - name: "Install required packages"
         run: |
           dnf --setopt install_weak_deps=False install -y \
             cmake gcc gcc-c++ libdnf5-devel dnf5-devel gtest-devel jsoncpp-devel
 
-      - name: "Build libdnf5 plugins"
+      - name: "Build libdnf5/dnf5 plugins"
         run: |
           mkdir build && cd build
           cmake ../ -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
           make
+
+      - name: "Unit test libdnf5/dnf5 plugins"
+        run: |
+          cd build
+          CTEST_OUTPUT_ON_FAILURE=1 make test
