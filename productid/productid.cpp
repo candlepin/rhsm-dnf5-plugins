@@ -111,10 +111,10 @@ void ProductIdPlugin::error_log(std::string_view format, Ss &&... args) const {
 /// configuration adjustments. We order the dnf to also try to download productid metadata.
 void ProductIdPlugin::repos_configured_hook() const {
     Base & base = get_base();
-    debug_log("repos_configured hook started");
+    debug_log("Hook repos_configured started");
     debug_log("Order dnf to download additional metadata type: productid");
     base.get_config().get_optional_metadata_types_option().set(METADATA_TYPE_PRODUCTID);
-    debug_log("repos_configured hook finished");
+    debug_log("Hook repos_configured finished successfully");
 }
     
 /// The management of productid certificates is triggered here after the transaction is finished.
@@ -133,20 +133,20 @@ void ProductIdPlugin::post_transaction_hook(const base::Transaction & transactio
     (void)transaction;
     Base & base = get_base();
 
-    debug_log("post_transaction hook started");
+    debug_log("Hook post_transaction started");
 
     // First, try to create all necessary directories
-    if (!setup_filesystem()) return;
+    if (!setup_filesystem()) {
+        debug_log("Hook post_transaction terminated with error");
+        return;
+    }
 
     // Get the list of enabled repositories
     repo::RepoQuery repos(base);
     repos.filter_enabled(true);
 
-    // When there are no enabled repositories, then we cannot try to get
-    // any product certificate from anywhere, and we can finish this hook here.
     if (repos.empty()) {
-        warning_log("No enabled repositories found; Exiting.");
-        return;
+        debug_log("No enabled repositories found");
     }
 
     // Go through all enabled repositories and try to get paths of downloaded productid certificates.
@@ -156,13 +156,13 @@ void ProductIdPlugin::post_transaction_hook(const base::Transaction & transactio
         std::string productid_path = repo->get_metadata_path(METADATA_TYPE_PRODUCTID);
         if (!productid_path.empty()) {
             debug_log(
-                "productid certificates of '{}' repository downloaded to: {}",
+                "The productid certificates of '{}' repository downloaded to: {}",
                 repo->get_id(),
                 productid_path
                 );
         } else {
             debug_log(
-                "'{}' does not contain productid certificates",
+                "Repository '{}' does not contain productid certificates",
                 repo->get_id()
                 );
         }
@@ -172,12 +172,12 @@ void ProductIdPlugin::post_transaction_hook(const base::Transaction & transactio
 
     // TODO: Try to remove installed productid certificates when needed
 
-    debug_log("post_transaction hook finished");
+    debug_log("Hook post_transaction finished successfully");
 }
 
 /// This plugin needs the existence of several directories. Try to create these directories.
 bool ProductIdPlugin::setup_filesystem() const {
-    // Try to create the directory where we store product certificates "database"
+    // Try to create the directory where we store the "database" of product certificates
     if (std::filesystem::exists(PRODUCTDB_DIR)) {
         debug_log("Directory {} already exists", PRODUCTDB_DIR);
     } else {
@@ -187,6 +187,16 @@ bool ProductIdPlugin::setup_filesystem() const {
         } catch (const std::filesystem::filesystem_error &e) {
             error_log(
                 "Failed to create directory {}: {}; Exiting", PRODUCTDB_DIR, e.what());
+            return false;
+        }
+        // Other users should not be able to read /var/lib/rhsm
+        try {
+            std::filesystem::permissions(
+                PRODUCTDB_DIR,
+                std::filesystem::perms::others_all,
+                std::filesystem::perm_options::remove);
+        } catch (const std::filesystem::filesystem_error &e) {
+            error_log("Failed to set permissions for directory {}: {}", PRODUCTDB_DIR, e.what());
             return false;
         }
     }
