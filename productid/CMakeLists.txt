@@ -19,6 +19,7 @@ target_link_libraries(productid PUBLIC dnf5)
 
 # install the plugin into the common libdnf5-plugins location
 install(TARGETS productid LIBRARY DESTINATION "${CMAKE_INSTALL_FULL_LIBDIR}/libdnf5/plugins/")
+install(FILES "productid.conf" DESTINATION "${CMAKE_INSTALL_FULL_SYSCONFDIR}/dnf/libdnf5-plugins")
 
 # Testing of productdb
 add_executable(test_productdb test_productdb.cpp productdb.cpp)
