@@ -7,18 +7,21 @@
 #include "productdb.hpp"
 
 #include <fstream>
+#include <filesystem>
+#include <iostream>
+#include <ranges>
 
 /// We do not read the product db file in constructors. It is necessary
 /// to read the file explicitly using read_product_db() to be able to
 /// get an error when it is not possible to read the file.
 ProductDb::ProductDb() {
     path = DEFAULT_PRODUCTDB_FILE;
-    repo_map = std::map<std::string, std::set<std::string> >();
+    products = std::map<std::string, ProductRecord>();
 }
 
 ProductDb::ProductDb(const std::string &path) {
     this->path = path;
-    repo_map = std::map<std::string, std::set<std::string> >();
+    products = std::map<std::string, ProductRecord>();
 }
 
 ProductDb::~ProductDb() {
@@ -40,14 +43,14 @@ ProductDb::~ProductDb() {
 ///
 bool ProductDb::read_product_db() {
     if (path.empty()) {
-        return false;
+        throw std::runtime_error("Productdb file path is empty");
     }
 
     Json::Value root;
     std::ifstream file(path);
 
     if (!file.is_open()) {
-        return false;
+        throw std::runtime_error("Unable to open productdb file: " + path);
     }
     
     std::string file_content(
@@ -57,42 +60,57 @@ bool ProductDb::read_product_db() {
 
     Json::CharReaderBuilder reader_builder;
     std::unique_ptr<Json::CharReader> reader(reader_builder.newCharReader());
+    Json::String errors;
     if (!reader->parse(file_content.c_str(),
                        file_content.c_str() + file_content.length(),
                        &root,
-                       nullptr)) {
+                       &errors)) {
         file.close();
-        return false;
+        throw std::runtime_error("Unable to parse productdb file: '" +  path + "': " + errors);
     }
-    repo_map.clear();
+    file.close();
+    products.clear();
+
+    if (!root.isObject()) {
+        throw std::runtime_error("The productdb file: '" + path + "' root value is not collection");
+    }
 
     for (const auto &product_id: root.getMemberNames()) {
-        std::set<std::string> repo_ids;
-        const Json::Value &repos = root[product_id];
+        products[product_id] = ProductRecord(product_id);
 
-        for (const auto &repo: repos) {
-            repo_ids.insert(repo.asString());
+        const Json::Value &repos = root[product_id];
+        if (!repos.isArray()) {
+            products.clear();
+            throw std::runtime_error("The productdb file: '" + path + "' has invalid format (value of collection is not array)");
         }
 
-        repo_map[product_id] = repo_ids;
+        for (const auto &repo: repos) {
+            if (!repo.isString()) {
+                products.clear();
+                throw std::runtime_error("The productdb file: '" + path + "' has invalid format (value of array is not string)");
+            }
+            auto repo_id = repo.asString();
+            products[product_id].add_repo_id(repo_id);
+        }
     }
 
-    file.close();
     return true;
 }
 
 /// Convert product database to JSON format
 Json::Value ProductDb::to_json() const {
     Json::Value root;
-    if (repo_map.empty()) {
+    if (products.empty()) {
         root = Json::objectValue;
     } else {
-        for (const auto &[product_id, repo_ids]: repo_map) {
-            Json::Value repo_array(Json::arrayValue);
-            for (const auto &repo_id: repo_ids) {
-                repo_array.append(repo_id);
+        for (const auto &product: products | std::views::values) {
+            if (product.is_installed) {
+                Json::Value repo_array(Json::arrayValue);
+                for (const auto &repo: product.repos | std::views::values) {
+                    repo_array.append(repo.repo_id);
+                }
+                root[product.product_id] = repo_array;
             }
-            root[product_id] = repo_array;
         }
     }
     return root;
@@ -123,50 +141,32 @@ bool ProductDb::write_product_db() const {
     return true;
 }
 
-/// Try to add repo_id in the repo_map
-bool ProductDb::add_repo_id(const std::string &product_id, const std::string &repo_id) {
-    if (auto [fst, snd] = repo_map[product_id].insert(repo_id); !snd) {
-        return false;
-    }
-    return true;
+/// Try to add product_id in the products
+bool ProductDb::add_product_id(const std::string &product_id, const std::string &product_cert_path) {
+    return products.insert({product_id, ProductRecord(product_id, product_cert_path)}).second;
 }
 
-/// Try to get repo_ids from the repo_map fir given product_id
-std::set<std::string> ProductDb::get_repo_ids(const std::string& product_id) {
-    if (repo_map.contains(product_id)) {
-        return repo_map[product_id];
-    }
-    return {};
-}
-
-/// Try to remove product_id from the repo_map
+/// Try to remove product with given product_id from the products (used)
 bool ProductDb::remove_product_id(const std::string& product_id) {
-    return repo_map.erase(product_id) > 0;
+    return products.erase(product_id) > 0;
+}
+
+/// Check if the product_id exists in the repo_map (used)
+bool ProductDb::has_product_id(const std::string& product_id) const {
+    return products.contains(product_id);
+}
+
+/// Try to add repo_id in the products
+bool ProductRecord::add_repo_id(const std::string &repo_id) {
+    return this->repos.insert({repo_id, RepoRecord(repo_id)}).second;
 }
 
 /// Try to remove repo_id from the repo_map[product_id]
-bool ProductDb::remove_repo_id(const std::string& product_id, const std::string& repo_id) {
-    if (!repo_map.contains(product_id)) {
-        return false;
-    }
-    return repo_map[product_id].erase(repo_id) > 0;
+bool ProductRecord::remove_repo_id(const std::string& repo_id) {
+    return this->repos.erase(repo_id) > 0;
 }
 
-/// Check if the product_id exists in the repo_map
-bool ProductDb::has_product_id(const std::string& product_id) const {
-    return repo_map.contains(product_id);
-}
-
-/// Check if the product_id exists in the repo_map and repo_id exists in the repo_map[product_id]
-bool ProductDb::has_repo_id(const std::string& product_id, const std::string& repo_id) const {
-    return repo_map.contains(product_id) && repo_map.at(product_id).contains(repo_id);
-}
-
-/// Convert the product database to a string representation
-std::string ProductDb::product_db_to_string() const {
-    std::stringstream ss;
-    const auto root = to_json();
-    Json::StyledStreamWriter stream_writer;
-    stream_writer.write(ss, root);
-    return ss.str();
+/// Check if the repo_id exists in the repo_map[product_id]
+bool ProductRecord::has_repo_id(const std::string &repo_id) const {
+    return this->repos.contains(repo_id);
 }

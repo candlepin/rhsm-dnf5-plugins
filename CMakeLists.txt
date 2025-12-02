@@ -22,7 +22,11 @@ if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_link_options(-Wl,--as-needed)
 endif()
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(OPENSSL REQUIRED IMPORTED_TARGET libcrypto libssl)
+
+# Enable testing in our project
+enable_testing()
+
 # libdnf5 plugins
 add_subdirectory("productid")
-
-enable_testing()
