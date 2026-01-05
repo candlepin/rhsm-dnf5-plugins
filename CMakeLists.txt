@@ -22,6 +22,9 @@ if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_link_options(-Wl,--as-needed)
 endif()
 
+# Install plugins to /usr/local/lib64/ by default
+include(GNUInstallDirs)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(OPENSSL REQUIRED IMPORTED_TARGET libcrypto libssl)
 
