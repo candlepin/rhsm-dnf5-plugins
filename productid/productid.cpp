@@ -132,27 +132,27 @@ private:
 };
 
 template <typename... Ss>
-void ProductIdPlugin::debug_log(std::string_view format, Ss &&... args) const {
+void ProductIdPlugin::debug_log(const std::string_view format, Ss &&... args) const {
     Base & base = this->get_base();
-    base.get_logger()->debug("[productid plugin] " + libdnf5::utils::sformat(format, std::forward<Ss>(args)...));
+    base.get_logger()->debug("[productid plugin] " + std::string(format), std::forward<Ss>(args)...);
 }
 
 template <typename... Ss>
-void ProductIdPlugin::info_log(std::string_view format, Ss &&... args) const {
+void ProductIdPlugin::info_log(const std::string_view format, Ss &&... args) const {
     Base & base = this->get_base();
-    base.get_logger()->info("[productid plugin] " + libdnf5::utils::sformat(format, std::forward<Ss>(args)...));
+    base.get_logger()->info("[productid plugin] " + std::string(format), std::forward<Ss>(args)...);
 }
 
 template <typename... Ss>
-void ProductIdPlugin::warning_log(std::string_view format, Ss &&... args) const {
+void ProductIdPlugin::warning_log(const std::string_view format, Ss &&... args) const {
     Base & base = this->get_base();
-    base.get_logger()->warning("[productid plugin] " + libdnf5::utils::sformat(format, std::forward<Ss>(args)...));
+    base.get_logger()->warning("[productid plugin] " + std::string(format), std::forward<Ss>(args)...);
 }
 
 template <typename... Ss>
-void ProductIdPlugin::error_log(std::string_view format, Ss &&... args) const {
+void ProductIdPlugin::error_log(const std::string_view format, Ss &&... args) const {
     Base & base = this->get_base();
-    base.get_logger()->error("[productid plugin] " + libdnf5::utils::sformat(format, std::forward<Ss>(args)...));
+    base.get_logger()->error("[productid plugin] " + std::string(format), std::forward<Ss>(args)...);
 }
 
 /// Try to process product certificates from a given directory that have not been loaded to the product_db yet during
