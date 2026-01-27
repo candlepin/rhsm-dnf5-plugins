@@ -193,12 +193,27 @@ namespace test_write_product_db {
 
     TEST_F(ProductDbTest, WriteDbToNonExistentPath) {
         test_db.path = "/nonexistent/path/to/file.json";
-        EXPECT_FALSE(test_db.write_product_db());
-        const auto err = strerror(errno);
-        EXPECT_NE(err, nullptr);
-        EXPECT_EQ(err, std::string("No such file or directory"));
+        EXPECT_THROW({
+            try {
+                EXPECT_FALSE(test_db.write_product_db());
+            } catch (std::runtime_error &e) {
+                EXPECT_STREQ(e.what(),
+                    "cannot create temporary file: (2) - No such file or directory [/nonexistent/path/to/productid.XXXXXX]");
+                throw;
+            }
+        }, std::runtime_error);
     }
+
     TEST_F(ProductDbTest, WriteEmptyDb) {
+        EXPECT_TRUE(test_db.write_product_db());
+        std::ifstream file(test_db.path);
+        std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        EXPECT_EQ(content, "{}");
+    }
+
+    TEST_F(ProductDbTest, WriteEmptyDbToAbsolutePath) {
+        // The directory '/tmp' should exist and should be writable by all users
+        test_db.path = "/tmp/test_product.json";
         EXPECT_TRUE(test_db.write_product_db());
         std::ifstream file(test_db.path);
         std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
