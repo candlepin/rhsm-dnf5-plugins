@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <iostream>
 #include <ranges>
+#include <libdnf5/utils/fs/temp.hpp>
 
 /// We do not read the product db file in constructors. It is necessary
 /// to read the file explicitly using read_product_db() to be able to
@@ -125,7 +126,21 @@ bool ProductDb::write_product_db() const {
 
     auto root = to_json();
 
-    std::ofstream file(path);
+    // Create the temporary file in the same directory as a target file to be
+    // able to atomically rename it to the target file at the end of this function.
+    // The temporary file is automatically deleted when the TempFile object goes out of scope
+    std::filesystem::path target_path(path);
+    std::filesystem::path temp_dir = target_path.parent_path();
+    // If the path contains only a filename, then the target file path is empty
+    // In this case, the temporary file will be created in the current working directory
+    if (temp_dir.empty()) {
+        temp_dir = std::filesystem::current_path();
+    }
+    // Try to create a temporary file. The following code can raise an exception
+    libdnf5::utils::fs::TempFile temp_file(temp_dir,"productid");
+    std::string temp_path = temp_file.get_path();
+
+    std::ofstream file(temp_path);
     if (!file.is_open()) {
         return false;
     }
@@ -138,6 +153,11 @@ bool ProductDb::write_product_db() const {
     stream_writer->write(root, &file);
 
     file.close();
+
+    // Atomically rename the temporary file to the target file (productid.json)
+    // This method can raise an exception, and such an exception has to be caught by calling code
+    std::filesystem::rename(temp_path, path);
+
     return true;
 }
 
