@@ -281,6 +281,12 @@ std::map<std::string, libdnf5::repo::Repo *> ProductIdPlugin::get_transaction_re
     std::map<std::string, libdnf5::repo::Repo *> active_repos;
     auto transaction_pkgs = transaction.get_transaction_packages();
     for (const auto &transaction_pkg : transaction_pkgs) {
+        // When the package is going to be removed or replaced, then related repository ID will
+        // contain "@System" and such a repository also cannot be considered as active, because
+        // the RPM will be removed from the system
+        if (libdnf5::transaction::transaction_item_action_is_outbound(transaction_pkg.get_action())) {
+            continue;
+        }
         auto pkg = transaction_pkg.get_package();
         auto repo = pkg.get_repo();
         auto repo_id = repo->get_id();
