@@ -70,7 +70,7 @@ def step_impl(context):
     :return: None
     """
     cmd = "rhc status --format json"
-    run_in_context(context, cmd, can_fail=False)
+    run_in_context(context, cmd, can_fail=True)
     result = json.loads(context.cmd_stdout)
     if not result["rhsm_connected"]:
         cmd = "rhc connect --username admin --password admin --organization donaldduck"
@@ -89,15 +89,33 @@ def step_impl(context):
         run_in_context(context, cmd, can_fail=False)
 
 
-@when('rpm "{rpm_name}" is installed from RPM repository')
-def step_impl(context, rpm_name):
+@when('rpms are installed from RPM repository')
+def step_impl(context):
     """
-    Install RPM package from RPM repository.
+    Install RPM packages from the RPM repository.
     :param context: behave context
-    :param rpm_name: name of the RPM package to install
     :return: None
     """
-    cmd = f"dnf5 install -y {rpm_name}"
+    rpm_list = []
+    for row in context.table:
+        rpm_list.append(row['rpm_name'])
+    assert len(rpm_list) > 0
+    cmd = f"dnf5 install -y {' '.join(rpm_list)}"
+    run_in_context(context, cmd, can_fail=False)
+
+
+@step("rpms are removed from system")
+def step_impl(context):
+    """
+    Remove RPMSs from the system.
+    :param context: behave context
+    :return: None
+    """
+    rpm_list = []
+    for row in context.table:
+        rpm_list.append(row['rpm_name'])
+    assert len(rpm_list) > 0
+    cmd = f"dnf5 remove -y {' '.join(rpm_list)}"
     run_in_context(context, cmd, can_fail=False)
 
 
