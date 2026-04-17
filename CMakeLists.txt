@@ -6,6 +6,7 @@ project(rhsm-dnf5-plugins LANGUAGES CXX C VERSION 1.0.0)
 message("Building ${PROJECT_NAME} version ${PROJECT_VERSION}")
 
 option(WITH_PLUGIN_PRODUCTID "Build with libdnf5 productid plugin" ON)
+option(WITH_PLUGIN_RHSM "Build with libdnf5 rhsm plugin" ON)
 
 # C++ standard
 set(CMAKE_CXX_STANDARD 20)
@@ -33,3 +34,4 @@ enable_testing()
 
 # libdnf5 plugins
 add_subdirectory("productid")
+add_subdirectory("rhsm")
