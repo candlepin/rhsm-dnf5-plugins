@@ -2,7 +2,11 @@
 #include <libdnf5/plugin/iplugin.hpp>
 
 #include <cstring>
+#include <format>
+#include <iostream>
 #include <unistd.h>
+
+#include "rhsm_utils.hpp"
 
 using namespace libdnf5;
 
@@ -63,6 +67,14 @@ namespace {
     private:
         void print_warnings() const;
 
+        void warn_system_not_registered() const;
+
+        void warn_no_entitlements() const;
+
+        void warn_entitlements_expired() const;
+
+        void log_releasever() const;
+
         template<typename... Ss>
         void debug_log(std::string_view format, Ss &&... args) const;
 
@@ -71,6 +83,9 @@ namespace {
 
         template<typename... Ss>
         void warning_log(std::string_view format, Ss &&... args) const;
+
+        template<typename... Ss>
+        void error_log(std::string_view format, Ss &&... args) const;
     };
 
 
@@ -89,13 +104,101 @@ namespace {
         get_base().get_logger()->warning("[rhsm plugin] " + std::string(format), std::forward<Ss>(args)...);
     }
 
+    template<typename... Ss>
+    void RhsmPlugin::error_log(const std::string_view format, Ss &&... args) const {
+        get_base().get_logger()->error("[rhsm plugin] " + std::string(format), std::forward<Ss>(args)...);
+    }
+
     // Print warning and info messages about subscription status.
     void RhsmPlugin::print_warnings() const {
         debug_log("Hook post_base_setup started");
 
+        if (getuid() != 0) {
+            info_log("Not root, Subscription Management repositories not updated");
+
+            // FIXME: replace with appropriate DNF API call when available
+            std::cout << "Not root, Subscription Management repositories not updated" << std::endl;
+            return;
+        }
+
+        if (!in_container()) {
+            const auto registered = has_consumer_certificate(CONSUMER_CERT_DIR);
+            if (!registered) {
+                warn_system_not_registered();
+            }
+            if (registered) {
+                // Try to warn about missing entitlements only in situation, when system is registered
+                if (!has_entitlement_certificates(ENTITLEMENT_CERT_DIR)) {
+                    warn_no_entitlements();
+                }
+            }
+        }
+
+        warn_entitlements_expired();
+        log_releasever();
+
         debug_log("Hook post_base_setup finished");
     }
 
+    // Log a warning message when the system is not registered (consumer certificate does not exist in /etc/pki/consumer)
+    void RhsmPlugin::warn_system_not_registered() const {
+        warning_log("System is not registered. No consumer certificate found in {}.", CONSUMER_CERT_DIR);
+
+        // FIXME: replace with appropriate DNF API call when available
+        std::cout << "This system is not registered with an entitlement server."
+                " You can use \"rhc\" or \"subscription-manager\" to register." << std::endl;
+    }
+
+    // Log a warning message when no entitlement certificate exists in /etc/pki/entitlement
+    void RhsmPlugin::warn_no_entitlements() const {
+        warning_log("No SCA entitlement certificate(s) found in {}", ENTITLEMENT_CERT_DIR);
+        std::cout << std::format("No SCA entitlement certificate(s) found in {}",
+                                 ENTITLEMENT_CERT_DIR) << std::endl;
+    }
+
+    // Log a warning message when SCA entitlement certificate(s) are expired
+    void RhsmPlugin::warn_entitlements_expired() const {
+        auto expired_entitlements = get_expired_entitlements(ENTITLEMENT_CERT_DIR);
+        if (expired_entitlements.empty()) {
+            return;
+        }
+
+        std::string expired_list;
+        for (const auto &entitlement: expired_entitlements) {
+            expired_list += "  - " + entitlement + "\n";
+        }
+
+        error_log(
+            "The following entitlement certificate(s) have expired:\n{}"
+            "Renew your subscription to resume access to updates.",
+            expired_list);
+
+        // FIXME: replace with appropriate DNF API call when available
+        std::cout << std::format(
+            "The following entitlement certificate(s) have expired:\n{}"
+            "Renew your subscription to resume access to updates.",
+            expired_list) << std::endl;
+    }
+
+    // Checks for the presence of /etc/dnf/var/releasever; if exists, then logs its value in an info message
+    void RhsmPlugin::log_releasever() const {
+        try {
+            // Release version check
+            auto releasever = get_releasever(RELEASEVER_FILE);
+            if (!releasever.empty()) {
+                info_log(
+                    "This system has release set to {} and it receives updates only for this release.",
+                    releasever);
+
+                // FIXME: replace with appropriate DNF API call when available
+                std::cout << std::format(
+                    "This system has release set to {} and it receives updates only for this release.",
+                    releasever) << std::endl;
+            }
+        } catch (const std::exception &e) {
+            warning_log("Unable to determine release version: {}", e.what());
+        }
+    }
 } // namespace
 
 
