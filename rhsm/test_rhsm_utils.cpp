@@ -66,15 +66,15 @@ TEST_F(RhsmUtilsTest, HasEntitlementCertificates_WithMultiplePemFiles) {
 }
 
 
-// --- get_expired_entitlements tests ---
+// --- is_cert_expired tests ---
 
-class EntitlementExpiryTest : public ::testing::Test {
+class CertExpiryTest : public ::testing::Test {
 protected:
     fs::path temp_dir;
     static fs::path test_data_dir;
 
     void SetUp() override {
-        temp_dir = fs::temp_directory_path() / "rhsm_expiry_test";
+        temp_dir = fs::temp_directory_path() / "rhsm_cert_expiry_test";
         fs::create_directories(temp_dir);
     }
 
@@ -90,94 +90,23 @@ protected:
     }
 };
 
-fs::path EntitlementExpiryTest::test_data_dir;
+fs::path CertExpiryTest::test_data_dir;
 
-TEST_F(EntitlementExpiryTest, GetExpired_EmptyDir) {
-    auto result = get_expired_entitlements(temp_dir);
-    EXPECT_TRUE(result.empty());
+TEST_F(CertExpiryTest, ExpiredCert_ReturnsTrue) {
+    EXPECT_TRUE(is_cert_expired(test_data_dir / "expired.pem"));
 }
 
-TEST_F(EntitlementExpiryTest, GetExpired_NonexistentDir) {
-    auto result = get_expired_entitlements(temp_dir / "nonexistent");
-    EXPECT_TRUE(result.empty());
+TEST_F(CertExpiryTest, ValidCert_ReturnsFalse) {
+    EXPECT_FALSE(is_cert_expired(test_data_dir / "valid.pem"));
 }
 
-TEST_F(EntitlementExpiryTest, GetExpired_SingleExpiredCert) {
-    fs::copy_file(test_data_dir / "expired.pem", temp_dir / "1234.pem");
-    auto result = get_expired_entitlements(temp_dir);
-    ASSERT_EQ(result.size(), 1u);
-    EXPECT_EQ(result[0], "1234");
+TEST_F(CertExpiryTest, NonexistentFile_Throws) {
+    EXPECT_THROW(is_cert_expired(temp_dir / "nonexistent.pem"), std::runtime_error);
 }
 
-TEST_F(EntitlementExpiryTest, GetExpired_SingleValidCert) {
-    fs::copy_file(test_data_dir / "valid.pem", temp_dir / "5678.pem");
-    auto result = get_expired_entitlements(temp_dir);
-    EXPECT_TRUE(result.empty());
-}
-
-TEST_F(EntitlementExpiryTest, GetExpired_MixedCerts_OnlyExpiredReturned) {
-    fs::copy_file(test_data_dir / "expired.pem", temp_dir / "1234.pem");
-    fs::copy_file(test_data_dir / "valid.pem", temp_dir / "5678.pem");
-    auto result = get_expired_entitlements(temp_dir);
-    ASSERT_EQ(result.size(), 1u);
-    EXPECT_EQ(result[0], "1234");
-}
-
-TEST_F(EntitlementExpiryTest, GetExpired_KeyFilesSkipped) {
-    // An expired cert named as a key file should not appear in results
-    fs::copy_file(test_data_dir / "expired.pem", temp_dir / "1234-key.pem");
-    auto result = get_expired_entitlements(temp_dir);
-    EXPECT_TRUE(result.empty());
-}
-
-TEST_F(EntitlementExpiryTest, GetExpired_NonPemFilesIgnored) {
-    // Non-pem files should be completely ignored, even if they contain cert data
-    fs::copy_file(test_data_dir / "expired.pem", temp_dir / "1234.txt");
-    fs::copy_file(test_data_dir / "expired.pem", temp_dir / "cert.der");
-    std::ofstream(temp_dir / "notes.conf") << "some config";
-    auto result = get_expired_entitlements(temp_dir);
-    EXPECT_TRUE(result.empty());
-}
-
-TEST_F(EntitlementExpiryTest, GetExpired_MultipleExpired_ReturnsSorted) {
-    // Use the same expired cert with different names to verify sorted output
-    fs::copy_file(test_data_dir / "expired.pem", temp_dir / "zebra.pem");
-    fs::copy_file(test_data_dir / "expired.pem", temp_dir / "alpha.pem");
-    fs::copy_file(test_data_dir / "expired.pem", temp_dir / "middle.pem");
-    auto result = get_expired_entitlements(temp_dir);
-    ASSERT_EQ(result.size(), 3u);
-    EXPECT_EQ(result[0], "alpha");
-    EXPECT_EQ(result[1], "middle");
-    EXPECT_EQ(result[2], "zebra");
-}
-
-TEST_F(EntitlementExpiryTest, GetExpired_InvalidPemContent) {
-    // A .pem file with garbage content should be silently skipped
+TEST_F(CertExpiryTest, InvalidPemContent_Throws) {
     std::ofstream(temp_dir / "corrupt.pem") << "this is not a valid certificate";
-    auto result = get_expired_entitlements(temp_dir);
-    EXPECT_TRUE(result.empty());
-}
-
-TEST_F(EntitlementExpiryTest, GetExpired_MixedExpiredValidAndKey) {
-    // Comprehensive scenario: expired certs, valid certs, key files, non-pem files
-    fs::copy_file(test_data_dir / "expired.pem", temp_dir / "productA.pem");
-    fs::copy_file(test_data_dir / "expired.pem", temp_dir / "productA-key.pem");
-    fs::copy_file(test_data_dir / "expired.pem", temp_dir / "productB.pem");
-    fs::copy_file(test_data_dir / "valid.pem", temp_dir / "productC.pem");
-    fs::copy_file(test_data_dir / "valid.pem", temp_dir / "productC-key.pem");
-    std::ofstream(temp_dir / "readme.txt") << "ignore me";
-    auto result = get_expired_entitlements(temp_dir);
-    ASSERT_EQ(result.size(), 2u);
-    EXPECT_EQ(result[0], "productA");
-    EXPECT_EQ(result[1], "productB");
-}
-
-TEST_F(EntitlementExpiryTest, GetExpired_RegularFileNotDir) {
-    // Passing a regular file (not a directory) should return empty
-    auto filepath = temp_dir / "afile.pem";
-    fs::copy_file(test_data_dir / "expired.pem", filepath);
-    auto result = get_expired_entitlements(filepath);
-    EXPECT_TRUE(result.empty());
+    EXPECT_THROW(is_cert_expired(temp_dir / "corrupt.pem"), std::runtime_error);
 }
 
 
