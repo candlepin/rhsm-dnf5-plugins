@@ -5,6 +5,9 @@
 #include <format>
 #include <iostream>
 #include <unistd.h>
+#include <openssl/pem.h>
+#include <openssl/types.h>
+#include <openssl/x509.h>
 
 #include "rhsm_utils.hpp"
 
@@ -70,6 +73,8 @@ namespace {
         void warn_system_not_registered() const;
 
         void warn_no_entitlements() const;
+
+        std::vector<std::string> get_expired_entitlements(const std::filesystem::path & entitlement_cert_dir) const;
 
         void warn_entitlements_expired() const;
 
@@ -156,15 +161,48 @@ namespace {
                                  ENTITLEMENT_CERT_DIR) << std::endl;
     }
 
+    /// Scans the directory for .pem files (skipping key files), checks notAfter dates,
+    /// and returns expired certificate stems.
+    std::vector<std::string> RhsmPlugin::get_expired_entitlements(const std::filesystem::path & entitlement_cert_dir) const {
+        namespace fs = std::filesystem;
+
+        std::set<std::string> expired_names;
+
+        if (!fs::exists(entitlement_cert_dir) || !fs::is_directory(entitlement_cert_dir)) {
+            return {};
+        }
+
+        for (const auto &entry: fs::directory_iterator(entitlement_cert_dir)) {
+            if (entry.path().extension() != ".pem") {
+                continue;
+            }
+            auto stem = entry.path().stem().string();
+            if (stem.ends_with("-key")) {
+                continue;
+            }
+
+            try {
+                if (is_cert_expired(entry.path())) {
+                    expired_names.insert(stem);
+                }
+            } catch (std::runtime_error &e) {
+                warning_log(e.what());
+            }
+        }
+
+        return {expired_names.begin(), expired_names.end()};
+    }
+
     // Log a warning message when SCA entitlement certificate(s) are expired
     void RhsmPlugin::warn_entitlements_expired() const {
-        auto expired_entitlements = get_expired_entitlements(ENTITLEMENT_CERT_DIR);
-        if (expired_entitlements.empty()) {
+        const auto expired = get_expired_entitlements(ENTITLEMENT_CERT_DIR);
+
+        if (expired.empty()) {
             return;
         }
 
         std::string expired_list;
-        for (const auto &entitlement: expired_entitlements) {
+        for (const auto &entitlement: expired) {
             expired_list += "  - " + entitlement + "\n";
         }
 

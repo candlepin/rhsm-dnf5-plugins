@@ -1,10 +1,12 @@
 #include "rhsm_utils.hpp"
 
 #include <algorithm>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <set>
 #include <stdexcept>
+#include <openssl/err.h>
 
 #include <openssl/pem.h>
 #include <openssl/x509.h>
@@ -64,50 +66,38 @@ bool has_entitlement_certificates(const std::filesystem::path &entitlement_cert_
         });
 }
 
-std::vector<std::string> get_expired_entitlements(const std::filesystem::path &entitlement_cert_dir) {
-    namespace fs = std::filesystem;
+bool is_cert_expired(const std::filesystem::path &cert_path) {
+    const auto fp = std::unique_ptr<FILE, void(*)(FILE *)>(
+        fopen(cert_path.c_str(), "r"),
+        [](FILE *f) { if (f) fclose(f); }
+    );
 
-    std::set<std::string> expired_names;
-
-    if (!fs::exists(entitlement_cert_dir) || !fs::is_directory(entitlement_cert_dir)) {
-        return {};
+    if (fp == nullptr) {
+        const std::string error_msg = std::error_code(errno, std::generic_category()).message();
+        throw std::runtime_error(std::format("Unable to open file {}: {}", cert_path.string(), error_msg));
     }
 
-    for (const auto &entry: fs::directory_iterator(entitlement_cert_dir)) {
-        if (entry.path().extension() != ".pem") {
-            continue;
-        }
-        auto stem = entry.path().stem().string();
-        if (stem.ends_with("-key")) {
-            continue;
-        }
+    const auto cert = std::unique_ptr<X509, decltype(&X509_free)>(
+        PEM_read_X509(fp.get(), nullptr, nullptr, nullptr),
+        X509_free
+    );
 
-        FILE *fp = fopen(entry.path().c_str(), "r");
-        if (fp == nullptr) {
-            continue;
-        }
-
-        X509 *cert = PEM_read_X509(fp, nullptr, nullptr, nullptr);
-        fclose(fp);
-
-        if (cert == nullptr) {
-            continue;
-        }
-
-        const ASN1_TIME *not_after = X509_get0_notAfter(cert);
-        int cmp = X509_cmp_current_time(not_after);
-
-        // Only process expired certificates (cmp <= 0 means expired or error)
-        if (cmp > 0) {
-            X509_free(cert);
-            continue;
-        }
-
-        expired_names.insert(stem);
-        X509_free(cert);
+    if (cert == nullptr) {
+        unsigned long ssl_err = ERR_get_error();
+        const char *reason = ERR_reason_error_string(ssl_err);
+        throw std::runtime_error(std::format("Unable to read certificate {}: {}", cert_path.string(), reason));
     }
 
-    return {expired_names.begin(), expired_names.end()};
+    const ASN1_TIME *not_after = X509_get0_notAfter(cert.get());
+    int cmp = X509_cmp_current_time(not_after);
+
+    // cmp == 0 indicates an error
+    if (cmp == 0) {
+        throw std::runtime_error("Unable to compare ASN1_TIME in certificate: " + cert_path.string());
+    }
+
+    // cmp == -1 means the cert time is earlier than current time (expired)
+    return cmp == -1;
 }
 
 std::string get_releasever(const std::filesystem::path &releasever_file) {
