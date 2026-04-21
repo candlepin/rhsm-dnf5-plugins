@@ -156,13 +156,18 @@ namespace {
 
     // Log a warning message when SCA entitlement certificate(s) are expired
     void RhsmPlugin::warn_entitlements_expired() const {
-        auto expired_entitlements = get_expired_entitlements(ENTITLEMENT_CERT_DIR);
-        if (expired_entitlements.empty()) {
+        auto [expired, unreadable] = get_expired_entitlements(ENTITLEMENT_CERT_DIR);
+
+        for (const auto &path : unreadable) {
+            warning_log("Failed to read or parse entitlement certificate: {}", path.string());
+        }
+
+        if (expired.empty()) {
             return;
         }
 
         std::string expired_list;
-        for (const auto &entitlement: expired_entitlements) {
+        for (const auto &entitlement: expired) {
             expired_list += "  - " + entitlement + "\n";
         }
 

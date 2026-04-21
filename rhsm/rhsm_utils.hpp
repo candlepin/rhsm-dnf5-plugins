@@ -25,10 +25,15 @@ bool has_consumer_certificate(const std::filesystem::path & consumer_cert_dir);
 /// Check if any entitlement certificate (.pem) exists in the given directory.
 bool has_entitlement_certificates(const std::filesystem::path & entitlement_cert_dir);
 
-/// Returns a sorted, deduplicated list of expired entitlement certificate names.
+/// Result of scanning entitlement certificates for expiration.
+struct EntitlementScanResult {
+    std::vector<std::string> expired;              ///< Sorted, deduplicated stems of expired certificates.
+    std::vector<std::filesystem::path> unreadable;  ///< Paths of .pem files that could not be opened or parsed.
+};
+
 /// Scans the directory for .pem files (skipping key files), checks notAfter dates,
-/// and returns the filename stems of certificates that have expired.
-std::vector<std::string> get_expired_entitlements(const std::filesystem::path & entitlement_cert_dir);
+/// and returns expired certificate stems along with any unreadable file paths.
+EntitlementScanResult get_expired_entitlements(const std::filesystem::path & entitlement_cert_dir);
 
 /// Read the release version from the given file path.
 /// Returns the trimmed first line of the file, or an empty string if the file

@@ -94,40 +94,42 @@ fs::path EntitlementExpiryTest::test_data_dir;
 
 TEST_F(EntitlementExpiryTest, GetExpired_EmptyDir) {
     auto result = get_expired_entitlements(temp_dir);
-    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(result.expired.empty());
+    EXPECT_TRUE(result.unreadable.empty());
 }
 
 TEST_F(EntitlementExpiryTest, GetExpired_NonexistentDir) {
     auto result = get_expired_entitlements(temp_dir / "nonexistent");
-    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(result.expired.empty());
+    EXPECT_TRUE(result.unreadable.empty());
 }
 
 TEST_F(EntitlementExpiryTest, GetExpired_SingleExpiredCert) {
     fs::copy_file(test_data_dir / "expired.pem", temp_dir / "1234.pem");
     auto result = get_expired_entitlements(temp_dir);
-    ASSERT_EQ(result.size(), 1u);
-    EXPECT_EQ(result[0], "1234");
+    ASSERT_EQ(result.expired.size(), 1u);
+    EXPECT_EQ(result.expired[0], "1234");
 }
 
 TEST_F(EntitlementExpiryTest, GetExpired_SingleValidCert) {
     fs::copy_file(test_data_dir / "valid.pem", temp_dir / "5678.pem");
     auto result = get_expired_entitlements(temp_dir);
-    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(result.expired.empty());
 }
 
 TEST_F(EntitlementExpiryTest, GetExpired_MixedCerts_OnlyExpiredReturned) {
     fs::copy_file(test_data_dir / "expired.pem", temp_dir / "1234.pem");
     fs::copy_file(test_data_dir / "valid.pem", temp_dir / "5678.pem");
     auto result = get_expired_entitlements(temp_dir);
-    ASSERT_EQ(result.size(), 1u);
-    EXPECT_EQ(result[0], "1234");
+    ASSERT_EQ(result.expired.size(), 1u);
+    EXPECT_EQ(result.expired[0], "1234");
 }
 
 TEST_F(EntitlementExpiryTest, GetExpired_KeyFilesSkipped) {
     // An expired cert named as a key file should not appear in results
     fs::copy_file(test_data_dir / "expired.pem", temp_dir / "1234-key.pem");
     auto result = get_expired_entitlements(temp_dir);
-    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(result.expired.empty());
 }
 
 TEST_F(EntitlementExpiryTest, GetExpired_NonPemFilesIgnored) {
@@ -136,7 +138,8 @@ TEST_F(EntitlementExpiryTest, GetExpired_NonPemFilesIgnored) {
     fs::copy_file(test_data_dir / "expired.pem", temp_dir / "cert.der");
     std::ofstream(temp_dir / "notes.conf") << "some config";
     auto result = get_expired_entitlements(temp_dir);
-    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(result.expired.empty());
+    EXPECT_TRUE(result.unreadable.empty());
 }
 
 TEST_F(EntitlementExpiryTest, GetExpired_MultipleExpired_ReturnsSorted) {
@@ -145,17 +148,19 @@ TEST_F(EntitlementExpiryTest, GetExpired_MultipleExpired_ReturnsSorted) {
     fs::copy_file(test_data_dir / "expired.pem", temp_dir / "alpha.pem");
     fs::copy_file(test_data_dir / "expired.pem", temp_dir / "middle.pem");
     auto result = get_expired_entitlements(temp_dir);
-    ASSERT_EQ(result.size(), 3u);
-    EXPECT_EQ(result[0], "alpha");
-    EXPECT_EQ(result[1], "middle");
-    EXPECT_EQ(result[2], "zebra");
+    ASSERT_EQ(result.expired.size(), 3u);
+    EXPECT_EQ(result.expired[0], "alpha");
+    EXPECT_EQ(result.expired[1], "middle");
+    EXPECT_EQ(result.expired[2], "zebra");
 }
 
 TEST_F(EntitlementExpiryTest, GetExpired_InvalidPemContent) {
-    // A .pem file with garbage content should be silently skipped
+    // A .pem file with garbage content should be reported as unreadable
     std::ofstream(temp_dir / "corrupt.pem") << "this is not a valid certificate";
     auto result = get_expired_entitlements(temp_dir);
-    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(result.expired.empty());
+    ASSERT_EQ(result.unreadable.size(), 1u);
+    EXPECT_EQ(result.unreadable[0].filename(), "corrupt.pem");
 }
 
 TEST_F(EntitlementExpiryTest, GetExpired_MixedExpiredValidAndKey) {
@@ -167,9 +172,9 @@ TEST_F(EntitlementExpiryTest, GetExpired_MixedExpiredValidAndKey) {
     fs::copy_file(test_data_dir / "valid.pem", temp_dir / "productC-key.pem");
     std::ofstream(temp_dir / "readme.txt") << "ignore me";
     auto result = get_expired_entitlements(temp_dir);
-    ASSERT_EQ(result.size(), 2u);
-    EXPECT_EQ(result[0], "productA");
-    EXPECT_EQ(result[1], "productB");
+    ASSERT_EQ(result.expired.size(), 2u);
+    EXPECT_EQ(result.expired[0], "productA");
+    EXPECT_EQ(result.expired[1], "productB");
 }
 
 TEST_F(EntitlementExpiryTest, GetExpired_RegularFileNotDir) {
@@ -177,7 +182,7 @@ TEST_F(EntitlementExpiryTest, GetExpired_RegularFileNotDir) {
     auto filepath = temp_dir / "afile.pem";
     fs::copy_file(test_data_dir / "expired.pem", filepath);
     auto result = get_expired_entitlements(filepath);
-    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(result.expired.empty());
 }
 
 

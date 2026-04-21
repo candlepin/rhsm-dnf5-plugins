@@ -64,10 +64,11 @@ bool has_entitlement_certificates(const std::filesystem::path &entitlement_cert_
         });
 }
 
-std::vector<std::string> get_expired_entitlements(const std::filesystem::path &entitlement_cert_dir) {
+EntitlementScanResult get_expired_entitlements(const std::filesystem::path &entitlement_cert_dir) {
     namespace fs = std::filesystem;
 
     std::set<std::string> expired_names;
+    std::vector<fs::path> unreadable;
 
     if (!fs::exists(entitlement_cert_dir) || !fs::is_directory(entitlement_cert_dir)) {
         return {};
@@ -84,6 +85,7 @@ std::vector<std::string> get_expired_entitlements(const std::filesystem::path &e
 
         FILE *fp = fopen(entry.path().c_str(), "r");
         if (fp == nullptr) {
+            unreadable.push_back(entry.path());
             continue;
         }
 
@@ -91,6 +93,7 @@ std::vector<std::string> get_expired_entitlements(const std::filesystem::path &e
         fclose(fp);
 
         if (cert == nullptr) {
+            unreadable.push_back(entry.path());
             continue;
         }
 
@@ -107,7 +110,7 @@ std::vector<std::string> get_expired_entitlements(const std::filesystem::path &e
         X509_free(cert);
     }
 
-    return {expired_names.begin(), expired_names.end()};
+    return {.expired = {expired_names.begin(), expired_names.end()}, .unreadable = std::move(unreadable)};
 }
 
 std::string get_releasever(const std::filesystem::path &releasever_file) {
