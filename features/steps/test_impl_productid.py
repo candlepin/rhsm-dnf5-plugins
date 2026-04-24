@@ -73,7 +73,9 @@ def step_impl(context):
     run_in_context(context, cmd, can_fail=True)
     result = json.loads(context.cmd_stdout)
     if not result["rhsm_connected"]:
-        cmd = "rhc connect --username admin --password admin --organization donaldduck"
+        # TODO: Read credentials from config file
+        cmd = "rhc connect --username admin --password admin --organization donaldduck " \
+              "--enable-feature content --disable-feature analytics --disable-feature remote-management"
         run_in_context(context, cmd, can_fail=False)
 
 
