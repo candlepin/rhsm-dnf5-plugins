@@ -54,7 +54,7 @@ jobs:
           cp ~/rpmbuild/RPMS/*/*.rpm rpms/
 
       - name: "Upload RPM artifacts"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rpms-${{ matrix.slug }}
           path: rpms/
