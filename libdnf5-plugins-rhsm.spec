@@ -26,6 +26,9 @@ Libdnf5 plugin for management of product certificates
 %{_libdir}/libdnf5/plugins/productid.*
 %config(noreplace) %{_sysconfdir}/dnf/libdnf5-plugins/productid.conf
 
+%{_libdir}/libdnf5/plugins/rhsm.*
+%config(noreplace) %{_sysconfdir}/dnf/libdnf5-plugins/rhsm.conf
+
 %prep
 %autosetup -p1
 
