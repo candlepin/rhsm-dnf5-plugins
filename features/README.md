@@ -62,3 +62,7 @@ This step can be reused in many scenarios and in many feature files. Thus, if yo
 integration tests, then write it first in natural language in `.feature` file. When some steps are missing,
 then implement required steps in an existing file in `./steps` directory or introduce a new `.py` file in
 this directory.
+
+When it is necessary to run some code before or after each step, scenario or feature, then it is possible to
+extend `environment.py` file. For more information about environment read
+[related API documentation](https://behave.readthedocs.io/en/latest/api/#environment-file-functions).
