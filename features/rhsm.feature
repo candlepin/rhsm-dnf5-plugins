@@ -32,3 +32,10 @@ Feature: RHSM plugin info and warning messages
     Then command stdout contains "This system has release set to"
     And command stdout contains "it receives updates only for this release"
 
+
+  Scenario: Container mode displays container info message
+    Given system is not registered
+    And system operates in container mode
+    When dnf5 command is run
+    Then command stdout contains "running in container mode"
+

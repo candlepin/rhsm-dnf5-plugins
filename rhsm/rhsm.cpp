@@ -137,6 +137,9 @@ namespace {
                     warn_no_entitlements();
                 }
             }
+        } else {
+            info_log("Running in container mode. Subscription management is handled by the host.");
+            std::cout << "This system is running in container mode. Subscription management is handled by the host." << std::endl;
         }
 
         warn_entitlements_expired();
