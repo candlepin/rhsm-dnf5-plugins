@@ -47,12 +47,14 @@ def run_in_context(context, cmd, can_fail=False, expected_exit_code=None, **run_
 
     context.cmd_exitcode, context.cmd_stdout, context.cmd_stderr = run(cmd, **run_args)
 
-    if not can_fail and context.cmd_exitcode != 0:
+    if expected_exit_code is not None:
+        if expected_exit_code != context.cmd_exitcode:
+            raise AssertionError(
+                f'Running command "{cmd}" had unexpected exit code: {context.cmd_exitcode}\n'
+                f'stdout: {context.cmd_stdout}\nstderr: {context.cmd_stderr}'
+            )
+    elif not can_fail and context.cmd_exitcode != 0:
         raise AssertionError(
             f'Running command "{cmd}" failed: {context.cmd_exitcode}\n'
             f'stdout: {context.cmd_stdout}\nstderr: {context.cmd_stderr}'
-        )
-    elif expected_exit_code is not None and expected_exit_code != context.cmd_exitcode:
-        raise AssertionError(
-            f'Running command "{cmd}" had unexpected exit code: {context.cmd_exitcode}'
         )
