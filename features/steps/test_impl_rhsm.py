@@ -7,7 +7,6 @@ import shutil
 from common import run_in_context
 
 ENTITLEMENT_CERT_DIR = "/etc/pki/entitlement/"
-ENTITLEMENT_BACKUP_DIR = "/tmp/entitlement-backup/"
 RELEASEVER_FILE = "/etc/dnf/vars/releasever"
 
 
@@ -37,11 +36,10 @@ def step_impl(context):
     if not os.path.isdir(ENTITLEMENT_CERT_DIR):
         return
 
-    os.makedirs(ENTITLEMENT_BACKUP_DIR, exist_ok=True)
     for filename in os.listdir(ENTITLEMENT_CERT_DIR):
         if filename.endswith(".pem"):
             src = os.path.join(ENTITLEMENT_CERT_DIR, filename)
-            dst = os.path.join(ENTITLEMENT_BACKUP_DIR, filename)
+            dst = os.path.join(context.entitlement_backup_dir, filename)
             shutil.move(src, dst)
 
 
