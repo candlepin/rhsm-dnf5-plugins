@@ -8,6 +8,8 @@ from common import run_in_context
 
 ENTITLEMENT_CERT_DIR = "/etc/pki/entitlement/"
 RELEASEVER_FILE = "/etc/dnf/vars/releasever"
+RHSM_HOST_CONFIG_DIR = "/etc/rhsm-host"
+ENTITLEMENT_HOST_CERT_DIR = "/etc/pki/entitlement-host"
 
 
 @given("system is not registered")
@@ -56,6 +58,20 @@ def step_impl(context, release):
     with open(RELEASEVER_FILE, "w") as f:
         f.write(release + "\n")
     context._releasever_created = True
+
+
+@given("system operates in container mode")
+def step_impl(context):
+    """
+    Simulate container mode by creating the RHSM host directories that the
+    plugin uses to detect a UBI container environment.
+    Directories are removed by the after_scenario hook in environment.py.
+    :param context: behave context
+    :return: None
+    """
+    os.makedirs(RHSM_HOST_CONFIG_DIR, exist_ok=True)
+    os.makedirs(ENTITLEMENT_HOST_CERT_DIR, exist_ok=True)
+    context._container_mode_active = True
 
 
 @when("dnf5 command is run")
