@@ -137,6 +137,11 @@ namespace {
                     warn_no_entitlements();
                 }
             }
+        } else {
+            info_log("Running in container mode — subscription management is handled by the host.");
+
+            // FIXME: replace with appropriate DNF API call when available
+            std::cout << "Running in container mode — subscription management is handled by the host." << std::endl;
         }
 
         warn_entitlements_expired();

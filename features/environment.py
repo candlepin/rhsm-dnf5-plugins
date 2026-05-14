@@ -5,6 +5,8 @@ import tempfile
 ENTITLEMENT_CERT_DIR = "/etc/pki/entitlement/"
 ENTITLEMENT_BACKUP_DIR_PREFIX = "entitlement-backup-"
 RELEASEVER_FILE = "/etc/dnf/vars/releasever"
+RHSM_HOST_CONFIG_DIR = "/etc/rhsm-host"
+ENTITLEMENT_HOST_CERT_DIR = "/etc/pki/entitlement-host"
 
 
 def before_scenario(context, scenario):
@@ -29,3 +31,9 @@ def after_scenario(context, scenario):
         if os.path.exists(RELEASEVER_FILE):
             os.remove(RELEASEVER_FILE)
         context._releasever_created = False
+
+    if getattr(context, "_container_mode_active", False):
+        for dirpath in [RHSM_HOST_CONFIG_DIR, ENTITLEMENT_HOST_CERT_DIR]:
+            if os.path.isdir(dirpath):
+                shutil.rmtree(dirpath, ignore_errors=True)
+        context._container_mode_active = False
