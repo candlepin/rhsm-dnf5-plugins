@@ -2,6 +2,8 @@ import os
 import shutil
 
 ENTITLEMENT_CERT_DIR = "/etc/pki/entitlement/"
+# Fixed path is fine: behave runs scenarios sequentially and CI uses fresh containers.
+# If parallel execution is ever needed, scope this per-scenario via tempfile.mkdtemp.
 ENTITLEMENT_BACKUP_DIR = "/tmp/entitlement-backup/"
 RELEASEVER_FILE = "/etc/dnf/vars/releasever"
 
