@@ -11,11 +11,31 @@ This repository contains the following plugins:
 Requirements
 ------------
 
+Build Dependencies:
+
 * C++ compiler with C++20 support ([GCC](https://gcc.gnu.org/))
 * [CMake](https://cmake.org/) (the minimum required version is 3.21)
 * [libdnf5](https://github.com/rpm-software-management/dnf5)
 * [OpenSSL](https://www.openssl.org/)
+* [jsoncpp](https://github.com/open-source-parsers/jsoncpp)
 * [PkgConf](http://pkgconf.org/)
+
+On Fedora, install the build dependencies with:
+
+```console
+$ sudo dnf builddep ./libdnf5-plugins-rhsm.spec
+```
+
+Testing Dependencies:
+
+* [GoogleTest](https://google.github.io/googletest/) (for unit tests)
+* [Behave](https://github.com/behave/behave) (for integration tests)
+
+On Fedora, install the test dependencies with:
+
+```console
+$ pip install behave
+```
 
 Building plugins
 ----------------
@@ -29,10 +49,16 @@ $ cmake ../
 $ make
 ```
 
-To run unit tests, run::
+To run unit tests:
 
 ```console
 $ make test
+```
+
+To run integration tests:
+
+```console
+$ sudo behave
 ```
 
 To install the plugins on the system, run:
@@ -40,3 +66,5 @@ To install the plugins on the system, run:
 ```console
 $ sudo make install
 ```
+
+For more information on testing, see [TESTING.md](./TESTING.md).
