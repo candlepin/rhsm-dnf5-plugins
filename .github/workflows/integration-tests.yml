@@ -31,9 +31,11 @@ jobs:
       image: ${{ matrix.image }}
 
     services:
+      postgres:
+        image: ghcr.io/candlepin/candlepin-db:latest
       candlepin:
-        image: ghcr.io/candlepin/candlepin-unofficial:latest
-        options: --privileged --hostname candlepin.local
+        image: ghcr.io/candlepin/candlepin-app:latest
+        options: --hostname candlepin.local
 
     steps:
       - name: "Checkout repository"
@@ -58,9 +60,9 @@ jobs:
       - name: "Wait for candlepin to be ready"
         run: |
           for i in $(seq 1 60); do
-            if curl -sf http://candlepin:8080/candlepin/status > /dev/null 2>&1; then
+            if curl -sfk https://candlepin:8443/candlepin/status > /dev/null 2>&1; then
               echo "Candlepin is ready"
-              curl -s http://candlepin:8080/candlepin/status
+              curl -sk https://candlepin:8443/candlepin/status
               exit 0
             fi
             echo "Waiting for candlepin... attempt $i/60"
