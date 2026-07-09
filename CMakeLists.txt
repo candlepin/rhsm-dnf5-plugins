@@ -26,8 +26,12 @@ endif()
 # Install plugins to /usr/local/lib64/ by default
 include(GNUInstallDirs)
 
+find_package(GTest OPTIONAL_COMPONENTS)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(OPENSSL REQUIRED IMPORTED_TARGET libcrypto libssl)
+pkg_check_modules(JSONCPP REQUIRED IMPORTED_TARGET jsoncpp)
+pkg_check_modules(LIBDNF5 REQUIRED IMPORTED_TARGET libdnf5)
+
 
 # Enable testing in our project
 enable_testing()
