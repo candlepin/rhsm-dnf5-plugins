@@ -54,7 +54,11 @@ std::string get_product_id_from_cert_content(const std::string & cert_content) {
     const int extensions = X509_get_ext_count(x509);
     for (int i = 0; i < extensions; i++) {
         char oid[MAX_BUFF];
+#if OPENSSL_VERSION_MAJOR > 3
+        const X509_EXTENSION *ext = X509_get_ext(x509, i);
+#else
         X509_EXTENSION *ext = X509_get_ext(x509, i);
+#endif
         if (ext == nullptr) {
             X509_free(x509);
             const std::string err_str(ERR_error_string(ERR_get_error(), nullptr));

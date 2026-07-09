@@ -88,9 +88,28 @@ bool is_cert_expired(const std::filesystem::path &cert_path) {
         throw std::runtime_error(std::format("Unable to read certificate {}: {}", cert_path.string(), reason));
     }
 
+#if OPENSSL_VERSION_MAJOR > 3
+    int error;
+    int cmp = X509_check_certificate_times(nullptr, cert.get(), &error);
+    if (cmp != 1) {
+        switch (error) {
+            case X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD:
+                throw std::runtime_error("Certificate does not have notBefore field: " + cert_path.string());
+            case X509_V_ERR_CERT_NOT_YET_VALID:
+                return true;
+            case X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD:
+                throw std::runtime_error("Certificate does not have notAfter field: " + cert_path.string());
+            case X509_V_ERR_CERT_HAS_EXPIRED:
+                return true;
+            default:
+                throw std::runtime_error("Unable to compare certificate times: " + cert_path.string() +
+                    "; error code: " + std::to_string(error));
+        }
+    }
+    return false;
+#else
     const ASN1_TIME *not_after = X509_get0_notAfter(cert.get());
-    int cmp = X509_cmp_current_time(not_after);
-
+    const int cmp = X509_cmp_current_time(not_after);
     // cmp == 0 indicates an error
     if (cmp == 0) {
         throw std::runtime_error("Unable to compare ASN1_TIME in certificate: " + cert_path.string());
@@ -98,6 +117,7 @@ bool is_cert_expired(const std::filesystem::path &cert_path) {
 
     // cmp == -1 means the cert time is earlier than current time (expired)
     return cmp == -1;
+#endif
 }
 
 std::string get_releasever(const std::filesystem::path &releasever_file) {
