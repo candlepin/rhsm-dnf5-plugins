@@ -17,6 +17,11 @@ BuildRequires:  gcc-c++ >= 10.1
 %endif
 BuildRequires:  cmake >= 3.21
 BuildRequires:  pkgconfig(libcrypto)
+BuildRequires:  libdnf5-devel
+BuildRequires:  jsoncpp-devel
+%if %{with tests}
+BuildRequires:  gtest-devel
+%endif
 
 %description
 Libdnf5 plugin for management of product certificates
