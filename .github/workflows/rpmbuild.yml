@@ -39,7 +39,7 @@ jobs:
             git make rpm-build dnf5 cmake gcc gcc-c++ libdnf5-devel dnf5-devel gtest-devel jsoncpp-devel
 
       - name: "Checkout repository"
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: "Adding repository directory to the temporary git global config as a safe directory (again)"
         run: |
