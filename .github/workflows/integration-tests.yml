@@ -36,6 +36,12 @@ jobs:
       candlepin:
         image: ghcr.io/candlepin/candlepin-app:latest
         options: --hostname candlepin.local
+        ports:
+          - 8443:8443
+      candlepin-repo:
+        image: ghcr.io/candlepin/candlepin-repo:latest
+        ports:
+          - 8080:8080
 
     steps:
       - name: "Checkout repository"
@@ -78,7 +84,7 @@ jobs:
             --server.port 8443 \
             --server.prefix /candlepin \
             --server.insecure 1 \
-            --rhsm.baseurl http://candlepin:8080
+            --rhsm.baseurl http://candlepin-repo:8080
 
       - name: "Trust candlepin TLS certificate"
         run: |
@@ -90,9 +96,8 @@ jobs:
 
       - name: "Import candlepin RPM GPG key"
         run: |
-          curl -sf http://candlepin:8080/RPM-GPG-KEY-candlepin \
-            > /etc/pki/rpm-gpg/RPM-GPG-KEY-candlepin || \
-          echo "WARNING: Could not fetch RPM GPG key (test repos likely use gpgcheck=0)"
+          curl -sf http://candlepin-repo:8080/RPM-GPG-KEY-candlepin \
+            > /etc/pki/rpm-gpg/RPM-GPG-KEY-candlepin
 
       - name: "Start D-Bus system bus"
         run: |
