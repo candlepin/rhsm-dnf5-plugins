@@ -4,7 +4,7 @@ Red Hat Subscription Management (RHSM) libdnf5/DNF5 plugins written in C++
 This repository contains the following plugins:
 
 * [x] `productid` (libdnf5 plugin) more information in [./productid/README.md](./productid/README.md)
-* [ ] `rhsm` (libdnf5 plugin) TODO
+* [x] `rhsm` (libdnf5 plugin) more information in [./rhsm/README.md](./rhsm/README.md)
 * [ ] `release` (dnf5 plugin) TODO
 * [ ] `reporefresh` (dnf5 plugin) TODO
 
