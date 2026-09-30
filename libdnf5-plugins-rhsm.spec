@@ -1,7 +1,8 @@
 Name:           libdnf5-plugins-rhsm
-Version:        0.1
+Version:        0.1.1
+Epoch:          1
 Release:        %autorelease
-Summary:        Libdnf5 plugin for product certificates management
+Summary:        Libdnf5 plugins for Red Hat Subscription Management
 License:        GPL-3.0-only
 URL:            https://github.com/candlepin/rhsm-dnf5-plugins
 Source0:        %{name}-%{version}.tar.gz
@@ -9,7 +10,6 @@ Source0:        %{name}-%{version}.tar.gz
 %bcond_with     clang
 %bcond_with     tests
 
-Requires:       libdnf5
 %if %{with clang}
 BuildRequires:  clang
 %else
@@ -24,7 +24,9 @@ BuildRequires:  gtest-devel
 %endif
 
 %description
-Libdnf5 plugin for management of product certificates
+This package provides libdnf5 plugins to interact with repositories
+and subscriptions from the Red Hat entitlement platform; contains
+rhsm and product-id plugins.
 
 %files
 
