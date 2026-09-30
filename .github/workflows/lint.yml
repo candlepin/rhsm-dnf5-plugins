@@ -11,10 +11,22 @@ jobs:
   lint-language:
     name: Lint language
     runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+
     steps:
+      - name: "Install required packages"
+        run: |
+          dnf --setopt install_weak_deps=False install -y rpmlint
+
       - name: Check out code
         uses: actions/checkout@v7
+
       - name: Run woke
         uses: get-woke/woke-action@v0
         with:
           fail-on-error: true
+
+      - name: Run rpmlint
+        run: |
+          rpmlint libdnf5-plugins-rhsm.spec
