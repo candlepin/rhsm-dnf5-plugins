@@ -24,7 +24,7 @@ using namespace libdnf5;
 namespace {
 
 constexpr const char * PLUGIN_NAME{"productid"};
-constexpr plugin::Version PLUGIN_VERSION{.major = 1, .minor = 0, .micro = 0};
+constexpr plugin::Version PLUGIN_VERSION{.major = 0, .minor = 1, .micro = 0};
 constexpr PluginAPIVersion REQUIRED_PLUGIN_API_VERSION{.major = 2, .minor = 0};
 
 constexpr const char * attrs[]{"author.name", "author.email", "description", nullptr};
