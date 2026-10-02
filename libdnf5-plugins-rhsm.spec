@@ -8,7 +8,9 @@ URL:            https://github.com/candlepin/rhsm-dnf5-plugins
 Source0:        %{name}-%{version}.tar.gz
 
 %bcond_with     clang
-%bcond_with     tests
+%bcond_without  tests
+%bcond_without  productid_libdnf5_plugin
+%bcond_without  rhsm_libdnf5_plugin
 
 %if %{with clang}
 BuildRequires:  clang
@@ -40,7 +42,11 @@ rhsm and product-id plugins.
 %autosetup -p1
 
 %build
-%cmake
+%cmake \
+    -DWITH_TESTS=%{?with_tests:ON}%{!?with_tests:OFF} \
+    \
+    -DWITH_PLUGIN_PRODUCTID=%{?with_productid_libdnf5_plugin:ON}%{!?with_productid_libdnf5_plugin:OFF} \
+    -DWITH_PLUGIN_RHSM=%{?with_rhsm_libdnf5_plugin:ON}%{!?with_rhsm_libdnf5_plugin:OFF}
 %cmake_build
 
 %check

@@ -7,6 +7,7 @@ message("Building ${PROJECT_NAME} version ${PROJECT_VERSION}")
 
 option(WITH_PLUGIN_PRODUCTID "Build with libdnf5 productid plugin" ON)
 option(WITH_PLUGIN_RHSM "Build with libdnf5 rhsm plugin" ON)
+option(WITH_TESTS "Build with unit tests" ON)
 
 # C++ standard
 set(CMAKE_CXX_STANDARD 20)
