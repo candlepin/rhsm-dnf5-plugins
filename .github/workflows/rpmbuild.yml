@@ -35,15 +35,18 @@ jobs:
 
       - name: "Install required packages"
         run: |
-          dnf --setopt install_weak_deps=False install -y \
-            git make rpm-build dnf5 cmake gcc gcc-c++ libdnf5-devel dnf5-devel gtest-devel jsoncpp-devel
+          dnf --setopt install_weak_deps=False install -y git rpm-build
 
       - name: "Checkout repository"
         uses: actions/checkout@v7
 
-      - name: "Adding repository directory to the temporary git global config as a safe directory (again)"
+      - name: "Adding repository directory to the temporary git global config as a safe directory"
         run: |
           git config --global --add safe.directory /__w/rhsm-dnf5-plugins/rhsm-dnf5-plugins
+
+      - name: "Install required packages defined in libdnf5-plugins-rhsm.spec"
+        run: |
+          dnf --setopt install_weak_deps=False builddep -y libdnf5-plugins-rhsm.spec
 
       - name: "Build srpm"
         run: |
