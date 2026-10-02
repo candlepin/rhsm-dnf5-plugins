@@ -1,5 +1,5 @@
 Name:           libdnf5-plugins-rhsm
-Version:        0.1.1
+Version:        0.1.2
 Epoch:          1
 Release:        %autorelease
 Summary:        Libdnf5 plugins for Red Hat Subscription Management
