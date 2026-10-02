@@ -7,22 +7,22 @@ Feature: RHSM plugin info and warning messages
   Scenario: Unregistered system displays registration warning
     Given system is not registered
     When dnf5 command is run
-    Then command stdout contains "This system is not registered with an entitlement server"
-    And command stdout contains "subscription-manager"
+    Then command stderr contains "This system is not registered with an entitlement server"
+    And command stderr contains "subscription-manager"
 
 
   Scenario: Registered system with SCA certificate shows no warnings
     Given system is registered against candlepin server
     When dnf5 command is run
-    Then command stdout does not contain "This system is not registered"
-    And command stdout does not contain "No SCA entitlement certificate(s) found"
+    Then command stderr does not contain "This system is not registered"
+    And command stderr does not contain "No SCA entitlement certificate(s) found"
 
 
   Scenario: Registered system without entitlement certificates shows warning
     Given system is registered against candlepin server
     And entitlement certificates are removed
     When dnf5 command is run
-    Then command stdout contains "No SCA entitlement certificate(s) found"
+    Then command stderr contains "No SCA entitlement certificate(s) found"
 
 
   Scenario: System with release set displays release info

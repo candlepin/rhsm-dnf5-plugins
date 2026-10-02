@@ -97,6 +97,18 @@ def step_impl(context, text):
         f'Expected stdout to contain "{text}", but got:\n{context.cmd_stdout}'
     )
 
+@then('command stderr contains "{text}"')
+def step_impl(context, text):
+    """
+    Assert that command stderr contains the expected text.
+    :param context: behave context
+    :param text: expected substring
+    :return: None
+    """
+    assert text in context.cmd_stderr, (
+        f'Expected stderr to contain "{text}", but got:\n{context.cmd_stderr}'
+    )
+
 
 @then('command stdout does not contain "{text}"')
 def step_impl(context, text):
@@ -108,4 +120,16 @@ def step_impl(context, text):
     """
     assert text not in context.cmd_stdout, (
         f'Expected stdout NOT to contain "{text}", but got:\n{context.cmd_stdout}'
+    )
+
+@then('command stderr does not contain "{text}"')
+def step_impl(context, text):
+    """
+    Assert that command stderr does NOT contain the given text.
+    :param context: behave context
+    :param text: unexpected substring
+    :return: None
+    """
+    assert text not in context.cmd_stderr, (
+        f'Expected stderr NOT to contain "{text}", but got:\n{context.cmd_stderr}'
     )

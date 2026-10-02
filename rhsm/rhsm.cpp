@@ -1,5 +1,7 @@
 #include <libdnf5/base/base.hpp>
 #include <libdnf5/plugin/iplugin.hpp>
+#include <libdnf5/utils/bgettext/bgettext-mark-domain.h>
+#include <libdnf5/utils/format_locale.hpp>
 
 #include <cstring>
 #include <format>
@@ -25,6 +27,76 @@ namespace {
         "RHSM plugin for subscription status checks and warnings."
     };
 
+    /// Class for displaying simple messages without any argument.
+    class RhsmSimpleMessage : public Message {
+    public:
+        explicit RhsmSimpleMessage(const BgettextMessage text) : text(text) {}
+
+        std::string format(const bool translate, const utils::Locale * locale) const override {
+            return utils::format(locale, translate, text, 1);
+        }
+
+    private:
+        BgettextMessage text;
+    };
+
+    /// Class for displaying message with no installed entitlement certificate.
+    class RhsmNoEntitlementCertMessage : public Message {
+    public:
+        explicit RhsmNoEntitlementCertMessage(std::string cert_path) : cert_path(std::move(cert_path)) {}
+
+        std::string format(const bool translate, const utils::Locale * locale) const override {
+            return utils::format(
+                locale,
+                translate,
+                M_("No SCA entitlement certificate(s) found in {}"),
+                1,
+                cert_path);
+        }
+
+    private:
+        std::string cert_path;
+    };
+
+    /// Class for expired entitlement certificates message.
+    class RhsmExpiredEntCertsMessage : public Message {
+    public:
+        explicit RhsmExpiredEntCertsMessage(std::vector<std::string> expired) : expired(std::move(expired)) {}
+
+        std::string format(const bool translate, const utils::Locale * locale) const override {
+            std::string expired_list;
+            for (const auto &entitlement: expired) {
+                expired_list += "  - " + entitlement + "\n";
+            }
+            return utils::format(
+                locale,
+                translate,
+                M_("The following entitlement certificate(s) have expired:\n{}"
+            "Renew your subscription to resume access to updates."),
+            expired.size(), expired_list);
+        }
+
+    private:
+        std::vector<std::string> expired;
+    };
+
+    /// Class for displaying message that system has release set to a specific version.
+    class RhsmReleaseVerMessage : public Message {
+    public:
+        explicit RhsmReleaseVerMessage(std::string release_ver) : release_ver(std::move(release_ver)) {}
+
+        std::string format(const bool translate, const utils::Locale * locale) const override {
+            return utils::format(
+                locale,
+                translate,
+                M_("This system has release set to {} and it receives updates only for this release."),
+                1,
+                release_ver);
+        }
+
+    private:
+        std::string release_ver;
+    };
 
     class RhsmPlugin final : public plugin::IPlugin {
     public:
@@ -120,9 +192,10 @@ namespace {
 
         if (getuid() != 0) {
             info_log("Not root, Subscription Management repositories not updated");
-
-            // FIXME: replace with appropriate DNF API call when available
-            std::cout << "Not root, Subscription Management repositories not updated" << std::endl;
+            get_base().message(
+                base::InteractionCallbacks::MessageLevel::INFO,
+                RhsmSimpleMessage(M_("Not root, Subscription Management repositories not updated"))
+                );
             return;
         }
 
@@ -139,7 +212,10 @@ namespace {
             }
         } else {
             info_log("Running in container mode. Subscription management is handled by the host.");
-            std::cout << "This system is running in container mode. Subscription management is handled by the host." << std::endl;
+            get_base().message(
+                base::InteractionCallbacks::MessageLevel::INFO,
+                RhsmSimpleMessage(M_("This system is running in container mode. Subscription management is handled by the host."))
+                );
         }
 
         warn_entitlements_expired();
@@ -151,17 +227,20 @@ namespace {
     // Log a warning message when the system is not registered (consumer certificate does not exist in /etc/pki/consumer)
     void RhsmPlugin::warn_system_not_registered() const {
         warning_log("System is not registered. No consumer certificate found in {}.", CONSUMER_CERT_DIR);
-
-        // FIXME: replace with appropriate DNF API call when available
-        std::cout << "This system is not registered with an entitlement server."
-                " You can use \"rhc\" or \"subscription-manager\" to register." << std::endl;
+        get_base().message(
+            base::InteractionCallbacks::MessageLevel::WARNING,
+            RhsmSimpleMessage(M_("This system is not registered with an entitlement server."
+                " You can use \"rhc\" or \"subscription-manager\" to register."))
+            );
     }
 
     // Log a warning message when no entitlement certificate exists in /etc/pki/entitlement
     void RhsmPlugin::warn_no_entitlements() const {
         warning_log("No SCA entitlement certificate(s) found in {}", ENTITLEMENT_CERT_DIR);
-        std::cout << std::format("No SCA entitlement certificate(s) found in {}",
-                                 ENTITLEMENT_CERT_DIR) << std::endl;
+        get_base().message(
+            base::InteractionCallbacks::MessageLevel::WARNING,
+            RhsmNoEntitlementCertMessage( ENTITLEMENT_CERT_DIR)
+        );
     }
 
     /// Scans the directory for .pem files (skipping key files), checks notAfter dates,
@@ -206,19 +285,14 @@ namespace {
 
         std::string expired_list;
         for (const auto &entitlement: expired) {
-            expired_list += "  - " + entitlement + "\n";
+            expired_list += entitlement + ", ";
         }
 
-        error_log(
-            "The following entitlement certificate(s) have expired:\n{}"
-            "Renew your subscription to resume access to updates.",
-            expired_list);
-
-        // FIXME: replace with appropriate DNF API call when available
-        std::cout << std::format(
-            "The following entitlement certificate(s) have expired:\n{}"
-            "Renew your subscription to resume access to updates.",
-            expired_list) << std::endl;
+        error_log("The following entitlement certificate(s) have expired: {}",expired_list);
+        get_base().message(
+            base::InteractionCallbacks::MessageLevel::ERROR,
+            RhsmExpiredEntCertsMessage(expired)
+        );
     }
 
     // Checks for the presence of /etc/dnf/var/releasever; if exists, then logs its value in an info message
@@ -228,13 +302,13 @@ namespace {
             auto releasever = get_releasever(RELEASEVER_FILE);
             if (!releasever.empty()) {
                 info_log(
-                    "This system has release set to {} and it receives updates only for this release.",
-                    releasever);
+                    "This system has release set to {} in {} and it receives updates only for this release.",
+                    RELEASEVER_FILE, releasever);
 
-                // FIXME: replace with appropriate DNF API call when available
-                std::cout << std::format(
-                    "This system has release set to {} and it receives updates only for this release.",
-                    releasever) << std::endl;
+                get_base().message(
+                    base::InteractionCallbacks::MessageLevel::INFO,
+                    RhsmReleaseVerMessage(releasever)
+                    );
             }
         } catch (const std::exception &e) {
             warning_log("Unable to determine release version: {}", e.what());
