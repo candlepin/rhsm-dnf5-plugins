@@ -12,8 +12,8 @@ add_library(rhsm MODULE rhsm.cpp rhsm_utils.hpp rhsm_utils.cpp)
 # disable the 'lib' prefix in order to create rhsm.so
 set_target_properties(rhsm PROPERTIES PREFIX "")
 
-# link the libdnf5 library and OpenSSL (for certificate expiry checks)
-target_link_libraries(rhsm PUBLIC dnf5 PkgConfig::OPENSSL)
+# link the libdnf5 library, OpenSSL (for certificate expiry checks) and libvarlink
+target_link_libraries(rhsm PUBLIC dnf5 PkgConfig::OPENSSL PkgConfig::LIBVARLINK)
 
 # install the plugin into the common libdnf5-plugins location
 install(TARGETS rhsm LIBRARY DESTINATION "${CMAKE_INSTALL_FULL_LIBDIR}/libdnf5/plugins/")

@@ -21,6 +21,7 @@ BuildRequires:  cmake >= 3.21
 BuildRequires:  pkgconfig(libcrypto)
 BuildRequires:  libdnf5-devel
 BuildRequires:  jsoncpp-devel
+BuildRequires:  libvarlink-devel
 %if %{with tests}
 BuildRequires:  gtest-devel
 %endif
