@@ -17,10 +17,12 @@ archive:
 
 .PHONY: srpm
 srpm: archive
+	trap 'rm -f libdnf5-plugins-rhsm-$(VERSION).tar.gz' EXIT
 	rpmbuild --define "_sourcedir $$(pwd)" -bs libdnf5-plugins-rhsm.spec
 
 .PHONY: rpm
 rpm: archive
+	trap 'rm -f libdnf5-plugins-rhsm-$(VERSION).tar.gz' EXIT
 	rpmbuild --define "_sourcedir $$(pwd)" -bb libdnf5-plugins-rhsm.spec
 
 # The 'clean' target removes build artifacts.
