@@ -71,9 +71,14 @@ namespace {
             return utils::format(
                 locale,
                 translate,
-                M_("The following entitlement certificate(s) have expired:\n{}"
-            "Renew your subscription to resume access to updates."),
-            expired.size(), expired_list);
+                MP_(
+                    "The following entitlement certificate has expired:\n{}"
+                    "Renew your subscription to resume access to updates.",
+                    "The following entitlement certificates have expired:\n{}"
+                    "Renew your subscription to resume access to updates."),
+            expired.size(),
+            expired_list
+            );
         }
 
     private:
