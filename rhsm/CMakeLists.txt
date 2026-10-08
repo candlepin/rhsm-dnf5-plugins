@@ -33,6 +33,6 @@ if(WITH_TESTS)
     # Unit testing of rhsm utility functions
     add_executable(test_rhsm_utils test_rhsm_utils.cpp rhsm_utils.cpp)
     target_compile_definitions(test_rhsm_utils PRIVATE TEST_DATA_DIR="${PROJECT_SOURCE_DIR}/rhsm/test_data")
-    target_link_libraries(test_rhsm_utils gtest PkgConfig::OPENSSL)
+    target_link_libraries(test_rhsm_utils gtest PkgConfig::OPENSSL PkgConfig::LIBVARLINK)
     add_test(NAME rhsm_utils_unit_tests COMMAND test_rhsm_utils)
 endif()

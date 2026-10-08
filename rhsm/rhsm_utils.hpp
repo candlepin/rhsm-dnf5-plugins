@@ -36,4 +36,8 @@ bool is_cert_expired(const std::filesystem::path & cert_path);
 /// or a read error occurs.
 std::string get_releasever(const std::filesystem::path & releasever_file);
 
+/// Call Varlink method that tries to refresh entitlement certificate(s)
+/// Returns true if the refresh was successful, false otherwise.
+bool refresh_entitlement_certificates(bool force);
+
 #endif // RHSM_DNF5_PLUGINS_RHSM_UTILS_HPP

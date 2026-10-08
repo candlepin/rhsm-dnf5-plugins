@@ -4,10 +4,10 @@
 #include <format>
 #include <fstream>
 #include <iostream>
-#include <set>
 #include <stdexcept>
-#include <openssl/err.h>
+#include <varlink.h>
 
+#include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 
@@ -36,6 +36,61 @@ bool in_container() {
     //    /etc/pki/entitlement-host/ exists and is not empty
 
     return fs::is_directory(RHSM_HOST_CONFIG_DIR) && fs::is_directory(ENTITLEMENT_HOST_CERT_DIR);
+}
+
+// Callback method called when Varlink method call returns object with response
+static long refresh_reply_callback(VarlinkConnection *connection,
+                           const char *error,
+                           VarlinkObject *parameters,
+                           uint64_t flags,
+                           void *userdata) {
+    (void) connection;
+    (void) flags;
+    (void) userdata;
+
+    if (error) {
+        throw std::runtime_error(std::format("Error received: {}", error));
+    }
+
+    bool success;
+    if (varlink_object_get_bool(parameters, "success", &success) >= 0) {
+        if (success) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool refresh_entitlement_certificates(const bool force) {
+    VarlinkConnection *connection = nullptr;
+
+    if (const long res = varlink_connection_new(&connection, "unix:/run/rhc/com.redhat.rhc"); res < 0) {
+        fprintf(stderr, "Failed to connect: %s\n", varlink_error_string(-res));
+        return EXIT_FAILURE;
+    }
+
+    VarlinkObject *parameters = nullptr;
+    varlink_object_new(&parameters);
+    varlink_object_set_bool(parameters, "force", force);
+
+    const long res = varlink_connection_call(
+        connection,
+        "com.redhat.rhsm.testing.consumer.Refresh",
+        parameters,
+        0,
+        refresh_reply_callback,
+        nullptr
+        );
+    if (res < 0) {
+        fprintf(stderr, "Call failed: %s\n", varlink_error_string(-res));
+        varlink_connection_free(connection);
+        return EXIT_FAILURE;
+    }
+
+    varlink_connection_free(connection);
+
+    return EXIT_SUCCESS;
 }
 
 bool has_consumer_certificate(const std::filesystem::path &consumer_cert_dir) {
