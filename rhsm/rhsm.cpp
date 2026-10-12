@@ -4,12 +4,11 @@
 #include <libdnf5/utils/format_locale.hpp>
 
 #include <cstring>
-#include <format>
 #include <iostream>
 #include <unistd.h>
-#include <openssl/pem.h>
-#include <openssl/types.h>
 #include <openssl/x509.h>
+#include <thread>
+#include <chrono>
 
 #include "rhsm_utils.hpp"
 
@@ -140,12 +139,20 @@ namespace {
             return nullptr;
         }
 
-        void post_base_setup() override { print_warnings(); };
+        void post_base_setup() override
+        {
+            debug_log("Hook post_base_setup of rhsm plugin started");
+            print_warnings();
+            refresh();
+            debug_log("Hook post_base_setup of rhsm plugin finished");
+        };
 
         ConfigParser &config;
 
     private:
         void print_warnings() const;
+
+        void refresh() const;
 
         void warn_system_not_registered() const;
 
@@ -191,9 +198,27 @@ namespace {
         get_base().get_logger()->error("[rhsm plugin] " + std::string(format), std::forward<Ss>(args)...);
     }
 
+    // Refresh: entitlement certificate, redhat.repo, repo-overrides and release version
+    void RhsmPlugin::refresh() const {
+        RefreshInfo refresh_info;
+        debug_log("Refreshing entitlement certificates");
+        try {
+            refresh_entitlement_certificates(&refresh_info, false);
+        } catch (std::runtime_error &e) {
+            error_log("Failed to refresh entitlement certificates: {}", e.what());
+        }
+        debug_log("Waiting for entitlement certificates refresh to finish...");
+        // Stupid way how to wait for result
+        while (refresh_info.entitlement_cert_refresh_finished == false)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        debug_log("Entitlement certificates refresh finished %s",
+            refresh_info.entitlement_cert_refresh_success ? "success" : "failure");
+    }
+
     // Print warning and info messages about subscription status.
     void RhsmPlugin::print_warnings() const {
-        debug_log("Hook post_base_setup started");
 
         if (getuid() != 0) {
             info_log("Not root, Subscription Management repositories not updated");

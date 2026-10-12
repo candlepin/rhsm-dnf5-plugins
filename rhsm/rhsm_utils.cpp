@@ -47,22 +47,24 @@ static long refresh_reply_callback(VarlinkConnection *connection,
     (void) connection;
     (void) flags;
     (void) userdata;
+    auto *refresh_info = static_cast<RefreshInfo *>(userdata);
 
     if (error) {
         throw std::runtime_error(std::format("Error received: {}", error));
     }
 
-    bool success;
-    if (varlink_object_get_bool(parameters, "success", &success) >= 0) {
-        if (success) {
-            return true;
-        }
+    refresh_info->entitlement_cert_refresh_finished = true;
+    refresh_info->entitlement_cert_refresh_success = true;
+
+    const char *certificate_path;
+    if (varlink_object_get_string(parameters, "certificate_path", &certificate_path) >= 0) {
+        std::cout << "Certificate path: " << certificate_path << std::endl;
     }
 
-    return false;
+    return true;
 }
 
-bool refresh_entitlement_certificates(const bool force) {
+bool refresh_entitlement_certificates(RefreshInfo *refresh_info, const bool force) {
     VarlinkConnection *connection = nullptr;
 
     if (const long res = varlink_connection_new(&connection, "unix:/run/rhc/com.redhat.rhc"); res < 0) {
@@ -80,7 +82,7 @@ bool refresh_entitlement_certificates(const bool force) {
         parameters,
         0,
         refresh_reply_callback,
-        nullptr
+        refresh_info
         );
     if (res < 0) {
         fprintf(stderr, "Call failed: %s\n", varlink_error_string(-res));
