@@ -10,7 +10,7 @@ option(WITH_PLUGIN_RHSM "Build with libdnf5 rhsm plugin" ON)
 option(WITH_TESTS "Build with unit tests" ON)
 
 # C++ standard
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # warnings
@@ -33,6 +33,7 @@ pkg_check_modules(OPENSSL REQUIRED IMPORTED_TARGET libcrypto libssl)
 pkg_check_modules(JSONCPP REQUIRED IMPORTED_TARGET jsoncpp)
 pkg_check_modules(LIBDNF5 REQUIRED IMPORTED_TARGET libdnf5)
 pkg_check_modules(LIBVARLINK REQUIRED IMPORTED_TARGET libvarlink)
+pkg_check_modules(UUID REQUIRED IMPORTED_TARGET uuid)
 
 
 # Enable testing in our project

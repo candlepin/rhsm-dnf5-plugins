@@ -12,8 +12,9 @@ add_library(rhsm MODULE rhsm.cpp rhsm_utils.hpp rhsm_utils.cpp)
 # disable the 'lib' prefix in order to create rhsm.so
 set_target_properties(rhsm PROPERTIES PREFIX "")
 
-# link the libdnf5 library, OpenSSL (for certificate expiry checks) and libvarlink
-target_link_libraries(rhsm PUBLIC dnf5 PkgConfig::OPENSSL PkgConfig::LIBVARLINK)
+# link the libdnf5 library, OpenSSL (for certificate expiry checks), libvarlink
+# and libuuid (for generating correlation IDs)
+target_link_libraries(rhsm PUBLIC dnf5 PkgConfig::OPENSSL PkgConfig::LIBVARLINK PkgConfig::UUID stdc++exp)
 
 # install the plugin into the common libdnf5-plugins location
 install(TARGETS rhsm LIBRARY DESTINATION "${CMAKE_INSTALL_FULL_LIBDIR}/libdnf5/plugins/")
@@ -33,6 +34,6 @@ if(WITH_TESTS)
     # Unit testing of rhsm utility functions
     add_executable(test_rhsm_utils test_rhsm_utils.cpp rhsm_utils.cpp)
     target_compile_definitions(test_rhsm_utils PRIVATE TEST_DATA_DIR="${PROJECT_SOURCE_DIR}/rhsm/test_data")
-    target_link_libraries(test_rhsm_utils gtest PkgConfig::OPENSSL PkgConfig::LIBVARLINK)
+    target_link_libraries(test_rhsm_utils gtest PkgConfig::OPENSSL PkgConfig::LIBVARLINK PkgConfig::UUID stdc++exp)
     add_test(NAME rhsm_utils_unit_tests COMMAND test_rhsm_utils)
 endif()

@@ -7,8 +7,6 @@
 #include <iostream>
 #include <unistd.h>
 #include <openssl/x509.h>
-#include <thread>
-#include <chrono>
 
 #include "rhsm_utils.hpp"
 
@@ -143,7 +141,7 @@ namespace {
         {
             debug_log("Hook post_base_setup of rhsm plugin started");
             print_warnings();
-            refresh();
+            refresh_rhsm();
             debug_log("Hook post_base_setup of rhsm plugin finished");
         };
 
@@ -152,7 +150,7 @@ namespace {
     private:
         void print_warnings() const;
 
-        void refresh() const;
+        void refresh_rhsm() const;
 
         void warn_system_not_registered() const;
 
@@ -199,22 +197,27 @@ namespace {
     }
 
     // Refresh: entitlement certificate, redhat.repo, repo-overrides and release version
-    void RhsmPlugin::refresh() const {
+    void RhsmPlugin::refresh_rhsm() const {
         RefreshInfo refresh_info;
+        refresh_info.entitlement_cert_refresh_finished = false;
         debug_log("Refreshing entitlement certificates");
+        // get_base().progress()
+        get_base().message(
+            base::InteractionCallbacks::MessageLevel::INFO,
+            RhsmSimpleMessage(M_("Refreshing entitlement certificates"))
+            );
+        bool ret;
         try {
-            refresh_entitlement_certificates(&refresh_info, false);
+            ret = refresh_entitlement_certificates(&refresh_info, false);
         } catch (std::runtime_error &e) {
             error_log("Failed to refresh entitlement certificates: {}", e.what());
         }
-        debug_log("Waiting for entitlement certificates refresh to finish...");
-        // Stupid way how to wait for result
-        while (refresh_info.entitlement_cert_refresh_finished == false)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-        debug_log("Entitlement certificates refresh finished %s",
-            refresh_info.entitlement_cert_refresh_success ? "success" : "failure");
+        debug_log("Entitlement certificates refresh finished {}, {}",
+            refresh_info.entitlement_cert_refresh_finished ? "success" : "failure", ret);
+        get_base().message(
+            base::InteractionCallbacks::MessageLevel::INFO,
+            RhsmSimpleMessage(M_("Refreshing entitlement certificates is finished"))
+        );
     }
 
     // Print warning and info messages about subscription status.
