@@ -1,6 +1,5 @@
 Name:           libdnf5-plugins-rhsm
 Version:        0.1.2
-Epoch:          1
 Release:        %autorelease
 Summary:        Libdnf5 plugins for Red Hat Subscription Management
 License:        GPL-3.0-only
@@ -30,14 +29,6 @@ This package provides libdnf5 plugins to interact with repositories
 and subscriptions from the Red Hat entitlement platform; contains
 rhsm and product-id plugins.
 
-%files
-
-%{_libdir}/libdnf5/plugins/productid.*
-%config(noreplace) %{_sysconfdir}/dnf/libdnf5-plugins/productid.conf
-
-%{_libdir}/libdnf5/plugins/rhsm.*
-%config(noreplace) %{_sysconfdir}/dnf/libdnf5-plugins/rhsm.conf
-
 %prep
 %autosetup -p1
 
@@ -49,13 +40,21 @@ rhsm and product-id plugins.
     -DWITH_PLUGIN_RHSM=%{?with_rhsm_libdnf5_plugin:ON}%{!?with_rhsm_libdnf5_plugin:OFF}
 %cmake_build
 
+%install
+%cmake_install
+install -Dpm 0644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE
+
 %check
 %if %{with tests}
     %ctest
 %endif
 
-%install
-%cmake_install
+%files
+%license %{_licensedir}/%{name}/LICENSE
+%{_libdir}/libdnf5/plugins/productid.*
+%config(noreplace) %{_sysconfdir}/dnf/libdnf5-plugins/productid.conf
+%{_libdir}/libdnf5/plugins/rhsm.*
+%config(noreplace) %{_sysconfdir}/dnf/libdnf5-plugins/rhsm.conf
 
 %changelog
 %autochangelog
