@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 
+#include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <set>
 
 #include "rhsm_utils.hpp"
 

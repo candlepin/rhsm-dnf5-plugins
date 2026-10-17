@@ -1,15 +1,47 @@
 #include "rhsm_utils.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <format>
 #include <fstream>
 #include <iostream>
-#include <set>
 #include <stdexcept>
-#include <openssl/err.h>
+#include <varlink.h>
+#include <unistd.h>
+#include <uuid/uuid.h>
+#include <sys/epoll.h>
+#include <stacktrace>
 
+#include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
+
+std::string generate_uuid() {
+    uuid_t uuid;
+    uuid_generate(uuid);
+
+    // uuid_unparse writes the canonical 8-4-4-4-12 representation plus a
+    // terminating NUL, which requires 37 bytes.
+    char uuid_str[UUID_STR_LEN];
+    uuid_unparse_lower(uuid, uuid_str);
+
+    return std::string(uuid_str);
+}
+
+std::string get_locale() {
+    // Determine the locale from the environment following POSIX precedence.
+    // We intentionally do not call setlocale(LC_ALL, "") here, because that
+    // would mutate the global locale state of the whole dnf5 process in which
+    // this plugin runs.
+    for (const char *const var : {"LC_ALL", "LC_MESSAGES", "LANG"}) {
+        if (const char *const value = std::getenv(var); value != nullptr && value[0] != '\0') {
+            return std::string(value);
+        }
+    }
+
+    // POSIX default locale when nothing is set in the environment.
+    return "C.UTF-8";
+}
 
 bool in_container() {
     namespace fs = std::filesystem;
@@ -36,6 +68,180 @@ bool in_container() {
     //    /etc/pki/entitlement-host/ exists and is not empty
 
     return fs::is_directory(RHSM_HOST_CONFIG_DIR) && fs::is_directory(ENTITLEMENT_HOST_CERT_DIR);
+}
+
+// Callback method called when Varlink method call returns object with response
+static long refresh_reply_callback(VarlinkConnection *connection,
+                           const char *error,
+                           VarlinkObject *parameters,
+                           uint64_t flags,
+                           void *userdata) {
+    (void) connection;
+    (void) flags;
+    (void) userdata;
+    auto *refresh_info = static_cast<RefreshInfo *>(userdata);
+
+    refresh_info->entitlement_cert_refresh_finished = true;
+    if (error) {
+        if (strcmp(error, "com.redhat.rhsm.testing.content.CertificateUpToDate") == 0) {
+            const char *message;
+            if (varlink_object_get_string(parameters, "message", &message) >= 0) {
+                refresh_info->entitlement_cert_refresh_success = true;
+            } else {
+                fprintf(stdout, "Certificate up to date");
+            }
+        } else {
+            throw std::runtime_error(std::format("Error received: {}", error));
+        }
+    }
+
+    refresh_info->entitlement_cert_refresh_success = true;
+
+    // const char *certificate_path;
+    // if (varlink_object_get_string(parameters, "certificate_path", &certificate_path) >= 0) {
+    //     std::cout << "Certificate path: " << certificate_path << std::endl;
+    // }
+
+    return true;
+}
+
+bool refresh_entitlement_certificates(RefreshInfo *refresh_info, const bool force) {
+    VarlinkConnection *connection = nullptr;
+    VarlinkObject *parameters = nullptr;
+    VarlinkObject *metadata = nullptr;
+    int epoll_fd = -1;
+    int varlink_fd = -1;
+
+    std::ofstream rhsm_log("/tmp/dnf.rhsm.log", std::ios_base::out | std::ios_base::app);
+
+    rhsm_log << std::stacktrace::current() << std::endl;
+
+    rhsm_log << "Refreshing entitlement certificates..." << std::endl;
+
+    // Try to create a connection to the Varlink service
+    if (const long res = varlink_connection_new(&connection, "unix:/run/rhc/com.redhat.rhc"); res < 0) {
+        throw std::runtime_error(std::format("Failed to connect: {}", varlink_error_string(-res)));
+    }
+
+    rhsm_log << "Varlink connection created" << std::endl;
+
+    // Extract the raw connection file descriptor needed for epoll
+    varlink_fd = varlink_connection_get_fd(connection);
+    if (varlink_fd < 0) {
+        varlink_connection_close(connection);
+        throw std::runtime_error(std::format("Failed to fetch Varlink file descriptor."));
+    }
+
+    rhsm_log << "Varlink file descriptor: " << varlink_fd << std::endl;
+
+    // Create and configure the epoll instance
+    epoll_fd = epoll_create1(0); // More recent safe initialization wrapper
+    if (epoll_fd == -1) {
+        varlink_connection_close(connection);
+        throw std::runtime_error("epoll_create1 failed");
+    }
+
+    epoll_event ev = {};
+    epoll_event events[EPOLL_MAX_EVENTS];
+
+    memset(&ev, 0, sizeof(ev));
+    // Monitor the socket for incoming readable data
+    ev.events = EPOLLIN;
+    // Pack fd into event mapping context
+    ev.data.fd = varlink_fd;
+
+    // Bind the Varlink fd to the epoll tracking engine
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, varlink_fd, &ev) == -1) {
+        close(epoll_fd);
+        varlink_connection_close(connection);
+        throw std::runtime_error("epoll_ctl configuration failed");
+    }
+
+    rhsm_log << "Bint the Varlink fd to epoll tracking engine" << std::endl;
+
+    varlink_object_new(&parameters);
+    varlink_object_new(&metadata);
+
+    const char *user_agent = "dnf5";
+    varlink_object_set_string(metadata, "user_agent", user_agent);
+    rhsm_log << "User agent: " << "dnf" << std::endl;
+
+    const std::string correlation_id = generate_uuid();
+    rhsm_log << "Correlation ID: " << correlation_id << std::endl;
+    varlink_object_set_string(metadata, "correlation_id", correlation_id.c_str());
+
+    const std::string locale = get_locale();
+    rhsm_log << "Locale: " << locale << std::endl;
+    varlink_object_set_string(metadata, "locale", locale.c_str());
+
+    varlink_object_set_object(parameters, "metadata", metadata);
+    varlink_object_set_bool(parameters, "force", force);
+
+    rhsm_log << "Calling Varlink method..." << std::endl;
+
+    // Try to call the Varlink method
+    const long res = varlink_connection_call(
+        connection,
+        "com.redhat.rhsm.testing.content.Refresh",
+        parameters,
+        0,
+        refresh_reply_callback,
+        refresh_info
+        );
+    varlink_object_unref(parameters);
+
+    rhsm_log << "Varlink method called with result:" << res << std::endl;
+
+    if (res < 0) {
+        close(epoll_fd);
+        varlink_connection_free(connection);
+        throw std::runtime_error(std::format("Call failed: {}", varlink_error_string(-res)));
+    }
+
+    rhsm_log << "Waiting for Varlink result" << std::endl;
+
+    // Drive the epoll event loop
+    bool epoll_wait_interrupted = false;
+    while (refresh_info->entitlement_cert_refresh_finished == false) {
+        // Blocks until an event hits the socket (timeout is set to -1, which means infinite wait)
+        const int num_trig_events = epoll_wait(epoll_fd, events, EPOLL_MAX_EVENTS, EPOLL_WAIT_TIMEOUT_MS);
+
+        rhsm_log << "Epoll returned number of events: " << num_trig_events << std::endl;
+
+        if (num_trig_events < 0) {
+            epoll_wait_interrupted = true;
+            break;
+        }
+
+        for (int i = 0; i < num_trig_events; i++) {
+            // Check if the event matches our Varlink file descriptor and is ready to read
+            if (events[i].data.fd == varlink_fd && (events[i].events & EPOLLIN)) {
+
+                // CRITICAL: Tells libvarlink to parse the buffer stream and route to reply_callback()
+                rhsm_log << "Instructing libvarlink to process events" << std::endl;
+
+                if (const long ret = varlink_connection_process_events(connection, events[i].events); ret < 0) {
+                    close(epoll_fd);
+                    varlink_connection_free(connection);
+                    throw std::runtime_error(std::format(
+                        "Error processing wire frame data: {}", varlink_error_string(-ret))
+                        );
+                }
+            }
+        }
+    }
+
+
+    close(epoll_fd);
+    varlink_connection_free(connection);
+
+    if (epoll_wait_interrupted == true){
+        rhsm_log << "epoll_wait() was interrupted" << std::endl;
+        throw std::runtime_error("epoll_wait interrupted");
+    }
+    rhsm_log << "Refresh() finished " << std::endl << std::endl;
+
+    return true;
 }
 
 bool has_consumer_certificate(const std::filesystem::path &consumer_cert_dir) {
