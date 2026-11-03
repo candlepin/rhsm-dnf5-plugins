@@ -97,6 +97,7 @@ def step_impl(context, text):
         f'Expected stdout to contain "{text}", but got:\n{context.cmd_stdout}'
     )
 
+
 @then('command stderr contains "{text}"')
 def step_impl(context, text):
     """
@@ -121,6 +122,7 @@ def step_impl(context, text):
     assert text not in context.cmd_stdout, (
         f'Expected stdout NOT to contain "{text}", but got:\n{context.cmd_stdout}'
     )
+
 
 @then('command stderr does not contain "{text}"')
 def step_impl(context, text):

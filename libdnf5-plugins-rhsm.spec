@@ -18,10 +18,12 @@ BuildRequires:  gcc-c++ >= 10.1
 %endif
 BuildRequires:  cmake >= 3.21
 BuildRequires:  pkgconfig(libcrypto)
-BuildRequires:  libdnf5-devel
-BuildRequires:  jsoncpp-devel
+BuildRequires:  pkgconfig(uuid)
+BuildRequires:  pkgconfig(libdnf5)
+BuildRequires:  pkgconfig(jsoncpp)
+BuildRequires:  pkgconfig(libvarlink)
 %if %{with tests}
-BuildRequires:  gtest-devel
+BuildRequires:  pkgconfig(gtest)
 %endif
 
 %description

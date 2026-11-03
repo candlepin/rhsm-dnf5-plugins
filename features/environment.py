@@ -3,8 +3,23 @@ This module contains environment setup and teardown functions for the test suite
 """
 
 import os
+import re
 import shutil
 import tempfile
+
+from behave.fixture import use_fixture, use_fixture_by_tag
+
+from fixtures import configure_rhsm_plugin_option, fixture_registry
+from steps.constants import (
+    EXPIRED_ENTITLEMENT_CERT_NAME,
+    EXPIRED_ENTITLEMENT_KEY_NAME,
+)
+
+# Matches patterns like:
+#   fixture.configure_rhsm_plugin_option(config_option=full_refresh,value=true)
+CONFIGURE_RHSM_PLUGIN_OPTION_TAG_PATTERN = re.compile(
+    r"fixture\.configure_rhsm_plugin_option\((.+)\)"
+)
 
 ENTITLEMENT_CERT_DIR = "/etc/pki/entitlement/"
 ENTITLEMENT_BACKUP_DIR_PREFIX = "entitlement-backup-"
@@ -44,6 +59,13 @@ def after_scenario(context, scenario) -> None:
             shutil.move(src, dst)
     if backup_dir:
         shutil.rmtree(backup_dir, ignore_errors=True)
+
+    if getattr(context, "_expired_cert_installed", False):
+        for filename in (EXPIRED_ENTITLEMENT_CERT_NAME, EXPIRED_ENTITLEMENT_KEY_NAME):
+            filepath = os.path.join(ENTITLEMENT_CERT_DIR, filename)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        context._expired_cert_installed = False
 
     if getattr(context, "_releasever_created", False):
         if os.path.exists(RELEASEVER_FILE):
@@ -85,3 +107,38 @@ def after_step(context, step) -> None:
             print(f"context stderr: {context.cmd_stderr}")
         # TODO: Print content of dnf5 log and rhsm log since
         #       the scenario was started
+
+
+def before_tag(context, tag) -> None:
+    """
+    This function is executed before each tag in the test suite.
+    It is used to activate fixtures based on tags.
+    :param context: Context object
+    :param tag: Tag string
+    :return: None
+    """
+    # Parameterized fixture that sets a config option in the rhsm plugin config file.
+    # The tag encodes the option and value as keyword arguments:
+    #   @fixture.configure_rhsm_plugin_option(config_option=full_refresh,value=true)
+    match = CONFIGURE_RHSM_PLUGIN_OPTION_TAG_PATTERN.match(tag)
+    if match:
+        # 1. Extract the raw string inside parentheses, e.g.
+        #    "config_option=full_refresh,value=true"
+        args_str = match.group(1)
+
+        # 2. Split by comma and separate key=value pairs into a dictionary
+        kwargs = {}
+        for pair in args_str.split(","):
+            if "=" in pair:
+                key, val = pair.split("=", 1)
+                # Clean up whitespace or stray quotes
+                key = key.strip()
+                val = val.strip().strip("'\"")
+                kwargs[key] = val
+
+        # 3. Inject the fixture dynamically using the unpacked kwargs
+        return use_fixture(configure_rhsm_plugin_option, context, **kwargs)
+
+    if tag.startswith("fixture."):
+        return use_fixture_by_tag(tag, context, fixture_registry)
+    return None
