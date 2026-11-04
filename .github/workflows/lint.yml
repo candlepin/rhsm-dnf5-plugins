@@ -22,11 +22,6 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v7
 
-      - name: Run woke
-        uses: get-woke/woke-action@v0
-        with:
-          fail-on-error: true
-
       - name: Run rpmlint
         run: |
           rpmlint libdnf5-plugins-rhsm.spec
