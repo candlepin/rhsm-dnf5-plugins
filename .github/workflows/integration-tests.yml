@@ -6,15 +6,80 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   build-rpms:
     uses: ./.github/workflows/rpmbuild.yml
 
+  # Build the rhc and rhc-server RPMs from the latest main branch of the
+  # RedHatInsights/rhc repository. The rhc rpmbuild workflow does not run on
+  # pushes to its main branch, so there are no main-branch artifacts to
+  # download. Instead we reproduce its build here (checkout main, build with
+  # the same "make rpm" target) and upload the resulting RPMs as artifacts
+  # under a dedicated name so they do not clash with this project's own RPMs.
+  build-rhc-rpms:
+    name: "Build rhc RPMs (${{ matrix.name }})"
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Fedora latest"
+            image: "registry.fedoraproject.org/fedora:latest"
+            slug: "fedora-latest"
+          - name: "Fedora Rawhide"
+            image: "registry.fedoraproject.org/fedora:rawhide"
+            slug: "fedora-rawhide"
+
+    container:
+      image: ${{ matrix.image }}
+
+    steps:
+      - name: "Try to update Fedora first"
+        if: matrix.slug == 'fedora-rawhide'
+        run: |
+          dnf -y clean all; dnf -y update || true
+
+      - name: "Install basic packages for 'dnf builddep'"
+        run: |
+          dnf --setopt install_weak_deps=False install -y \
+            git rpm-build go-vendor-tools go-rpm-macros
+
+      - name: "Checkout rhc main branch"
+        uses: actions/checkout@v7
+        with:
+          repository: RedHatInsights/rhc
+          ref: main
+          persist-credentials: false
+
+      - name: "Add repository directory as a safe directory"
+        run: |
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+      - name: "Install build dependencies from rhc.spec"
+        run: |
+          dnf --setopt install_weak_deps=False builddep -y rhc.spec
+
+      - name: "Build rhc RPMs"
+        run: |
+          make rpm
+
+      - name: "Collect rhc RPM artifacts"
+        run: |
+          mkdir -p rhc-rpms
+          cp ~/rpmbuild/RPMS/*/*.rpm rhc-rpms/
+
+      - name: "Upload rhc RPM artifacts"
+        uses: actions/upload-artifact@v7
+        with:
+          name: rhc-rpms-${{ matrix.slug }}
+          path: rhc-rpms/
+          retention-days: 30
+
   integration-tests:
     name: "Integration Tests (${{ matrix.name }})"
-    needs: build-rpms
+    needs: [build-rpms, build-rhc-rpms]
     runs-on: ubuntu-latest
 
     strategy:
@@ -24,11 +89,11 @@ jobs:
           - name: "Fedora latest"
             image: "registry.fedoraproject.org/fedora:latest"
             artifact: "rpms-fedora-latest"
-            rhc_artifact: "rpms-fedora-latest"
+            rhc_artifact: "rhc-rpms-fedora-latest"
           - name: "Fedora Rawhide"
             image: "registry.fedoraproject.org/fedora:rawhide"
             artifact: "rpms-fedora-rawhide"
-            rhc_artifact: "rpms-fedora-rawhide"
+            rhc_artifact: "rhc-rpms-fedora-rawhide"
 
     container:
       image: ${{ matrix.image }}
@@ -56,38 +121,17 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ./rpms
 
-      - name: "Install test dependencies"
-        run: |
-          dnf --setopt install_weak_deps=False install -y \
-            subscription-manager python3-behave dnf5-plugins openssl curl \
-            jq dbus-daemon
-
-      - name: "Resolve latest rhc rpmbuild run on main"
-        id: rhc_run
-        env:
-          GH_TOKEN: ${{ secrets.RHC_ARTIFACTS_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          run_id=$(curl -sfL \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/RedHatInsights/rhc/actions/workflows/rpmbuild.yml/runs?branch=main&status=success&per_page=1" \
-            | jq -r '.workflow_runs[0].id')
-          if [ -z "${run_id}" ] || [ "${run_id}" = "null" ]; then
-            echo "ERROR: Could not determine latest successful rhc rpmbuild run on main" >&2
-            exit 1
-          fi
-          echo "Latest rhc rpmbuild run on main: ${run_id}"
-          echo "run_id=${run_id}" >> "${GITHUB_OUTPUT}"
-
-      - name: "Download rhc RPM artifacts from latest main build"
+      - name: "Download rhc RPM artifacts"
         uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.rhc_artifact }}
           path: ./rhc-rpms
-          repository: RedHatInsights/rhc
-          run-id: ${{ steps.rhc_run.outputs.run_id }}
-          github-token: ${{ secrets.RHC_ARTIFACTS_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: "Install test dependencies"
+        run: |
+          dnf --setopt install_weak_deps=False install -y \
+            subscription-manager python3-behave dnf5-plugins openssl curl \
+            dbus-daemon
 
       - name: "Install built RPMs"
         run: |
