@@ -189,6 +189,26 @@ jobs:
           sleep 2
           busctl --system status com.redhat.RHSM1
 
+      - name: "Start rhc-server Varlink service"
+        run: |
+          # The container has no systemd, so the rhc-server.socket unit cannot
+          # provide socket activation. Started on its own, rhc-server falls back
+          # to creating the Unix socket itself at /run/rhc/com.redhat.rhc, which
+          # is the Varlink endpoint the rhsm plugin connects to during a refresh.
+          mkdir -p /var/log/rhc
+          /usr/libexec/rhc/rhc-server > /var/log/rhc/rhc-server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if [ -S /run/rhc/com.redhat.rhc ]; then
+              echo "rhc-server Varlink socket is ready"
+              exit 0
+            fi
+            echo "Waiting for rhc-server Varlink socket... attempt $i/30"
+            sleep 1
+          done
+          echo "ERROR: rhc-server Varlink socket did not appear within timeout"
+          cat /var/log/rhc/rhc-server.log || true
+          exit 1
+
       - name: "Verify candlepin connectivity"
         run: |
           subscription-manager version
