@@ -18,10 +18,13 @@ BuildRequires:  gcc-c++ >= 10.1
 %endif
 BuildRequires:  cmake >= 3.21
 BuildRequires:  pkgconfig(libcrypto)
-BuildRequires:  pkgconfig(uuid)
 BuildRequires:  pkgconfig(libdnf5)
 BuildRequires:  pkgconfig(jsoncpp)
+# libvarlink and uuid are only needed by the rhsm plugin
+%if %{with rhsm_libdnf5_plugin}
+BuildRequires:  pkgconfig(uuid)
 BuildRequires:  pkgconfig(libvarlink)
+%endif
 %if %{with tests}
 BuildRequires:  pkgconfig(gtest)
 %endif
