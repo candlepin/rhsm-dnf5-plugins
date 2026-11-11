@@ -57,7 +57,6 @@ def step_impl(context, release):
     os.makedirs(os.path.dirname(RELEASEVER_FILE), exist_ok=True)
     with open(RELEASEVER_FILE, "w") as f:
         f.write(release + "\n")
-    context._releasever_created = True
 
 
 @given("system operates in container mode")
