@@ -1,6 +1,7 @@
 #include "rhsm_utils.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cstdlib>
 #include <format>
@@ -466,7 +467,17 @@ void VarlinkCTX::run_event_loop(const bool full_refresh) const
         // Blocks until an event hits the socket (bounded by wait_timeout_ms)
         const int num_trig_events = epoll_wait(epoll_fd, events, EPOLL_MAX_EVENTS, wait_timeout_ms);
         if (num_trig_events < 0) {
-            throw std::runtime_error("epoll_wait() interrupted");
+            // A signal can interrupt epoll_wait() while Varlink calls are still
+            // outstanding. Bailing out here would abandon those pending
+            // operations, which may still mutate certificates or repository
+            // state after we stopped waiting for their results. Retry the wait
+            // instead; the overall deadline checked above still bounds the loop.
+            if (errno == EINTR) {
+                continue;
+            }
+            throw std::runtime_error(std::format(
+                "epoll_wait() failed: {}",
+                std::error_code(errno, std::generic_category()).message()));
         }
 
         for (int i = 0; i < num_trig_events; i++) {
