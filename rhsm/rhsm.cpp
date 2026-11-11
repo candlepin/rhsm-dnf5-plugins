@@ -3,8 +3,6 @@
 #include <libdnf5/utils/bgettext/bgettext-mark-domain.h>
 #include <libdnf5/utils/format_locale.hpp>
 
-#include <algorithm>
-#include <cctype>
 #include <cstring>
 #include <iostream>
 #include <utility>
@@ -175,16 +173,11 @@ namespace {
                 if (registered)
                 {
                     expired = get_expired_entitlement_certificates(ENTITLEMENT_CERT_DIR);
-                    auto full_refresh = false;
 
                     // Try to get "full_refresh" configuration option from configuration file of this plugin
+                    auto full_refresh = false;
                     if (config.has_option("main", "full_refresh")) {
-                        auto full_refresh_val = config.get_value("main", "full_refresh");
-                        std::ranges::transform(full_refresh_val, full_refresh_val.begin(),
-                                               [](const unsigned char c) { return std::tolower(c); });
-                        if (full_refresh_val == "true" || full_refresh_val == "yes" || full_refresh_val == "1") {
-                            full_refresh = true;
-                        }
+                        full_refresh = is_full_refresh_enabled(config.get_value("main", "full_refresh"));
                     }
 
                     // Try to find out, if the redhat.repo file is outdated, i.e. when it is
@@ -198,7 +191,7 @@ namespace {
                         warning_log("Unable to determine if {} is outdated: {}", REDHAT_REPO_FILE, e.what());
                     }
 
-                    if (!expired.empty() || full_refresh || repo_file_outdated) {
+                    if (should_refresh_content(!expired.empty(), full_refresh, repo_file_outdated)) {
                         // Try to refresh data that are needed for content access
                         //  * entitlement certificate, redhat.repo, repo overrides and releasever file
                         refresh_rhsm(expired, full_refresh);

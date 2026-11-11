@@ -1,6 +1,7 @@
 #include "rhsm_utils.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cerrno>
 #include <chrono>
 #include <cstdlib>
@@ -703,4 +704,17 @@ bool is_repo_file_outdated(const std::filesystem::path & entitlement_cert_dir,
     // The repo file is outdated, when the newest entitlement certificate was
     // written after the last modification of the repo file.
     return newest_cert_time > repo_time;
+}
+
+bool is_full_refresh_enabled(const std::string &value) {
+    std::string normalized = value;
+    std::ranges::transform(normalized, normalized.begin(),
+                           [](const unsigned char c) { return std::tolower(c); });
+    return normalized == "true" || normalized == "yes" || normalized == "1";
+}
+
+bool should_refresh_content(const bool has_expired_certificates,
+                            const bool full_refresh,
+                            const bool repo_file_outdated) {
+    return has_expired_certificates || full_refresh || repo_file_outdated;
 }

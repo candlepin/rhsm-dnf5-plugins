@@ -382,6 +382,58 @@ TEST_F(RhsmUtilsTest, IsRepoFileOutdated_KeyFilesIgnored) {
 }
 
 
+// --- is_full_refresh_enabled tests ---
+
+TEST(FullRefreshOptionTest, AcceptedTruthyValues) {
+    EXPECT_TRUE(is_full_refresh_enabled("true"));
+    EXPECT_TRUE(is_full_refresh_enabled("yes"));
+    EXPECT_TRUE(is_full_refresh_enabled("1"));
+}
+
+TEST(FullRefreshOptionTest, CaseInsensitive) {
+    EXPECT_TRUE(is_full_refresh_enabled("TRUE"));
+    EXPECT_TRUE(is_full_refresh_enabled("True"));
+    EXPECT_TRUE(is_full_refresh_enabled("YeS"));
+}
+
+TEST(FullRefreshOptionTest, FalsyValues) {
+    EXPECT_FALSE(is_full_refresh_enabled("false"));
+    EXPECT_FALSE(is_full_refresh_enabled("no"));
+    EXPECT_FALSE(is_full_refresh_enabled("0"));
+}
+
+TEST(FullRefreshOptionTest, EmptyAndUnknownValues) {
+    EXPECT_FALSE(is_full_refresh_enabled(""));
+    EXPECT_FALSE(is_full_refresh_enabled("  "));
+    EXPECT_FALSE(is_full_refresh_enabled("enabled"));
+    // Leading/trailing whitespace is not trimmed, so "1 " is not truthy.
+    EXPECT_FALSE(is_full_refresh_enabled("1 "));
+}
+
+
+// --- should_refresh_content tests ---
+
+TEST(ShouldRefreshContentTest, NoReasonDoesNotRefresh) {
+    EXPECT_FALSE(should_refresh_content(false, false, false));
+}
+
+TEST(ShouldRefreshContentTest, ExpiredCertificateTriggersRefresh) {
+    EXPECT_TRUE(should_refresh_content(true, false, false));
+}
+
+TEST(ShouldRefreshContentTest, FullRefreshTriggersRefresh) {
+    EXPECT_TRUE(should_refresh_content(false, true, false));
+}
+
+TEST(ShouldRefreshContentTest, OutdatedRepoFileTriggersRefresh) {
+    EXPECT_TRUE(should_refresh_content(false, false, true));
+}
+
+TEST(ShouldRefreshContentTest, MultipleReasonsTriggerRefresh) {
+    EXPECT_TRUE(should_refresh_content(true, true, true));
+}
+
+
 // --- in_container ---
 // This is environment-dependent so we just verify it compiles and runs without crashing.
 

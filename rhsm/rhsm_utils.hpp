@@ -139,6 +139,18 @@ std::string get_releasever(const std::filesystem::path & releasever_file);
 bool is_repo_file_outdated(const std::filesystem::path & entitlement_cert_dir,
                            const std::filesystem::path & repo_file);
 
+/// Interpret the textual value of the "full_refresh" configuration option.
+/// The comparison is case-insensitive and returns true for "true", "yes" or
+/// "1"; any other value (including an empty string) returns false.
+bool is_full_refresh_enabled(const std::string & value);
+
+/// Decide whether a refresh of the data needed for content access should be
+/// triggered. A refresh is needed when at least one entitlement certificate has
+/// expired, when full_refresh is enabled, or when the redhat.repo file is
+/// outdated.
+bool should_refresh_content(bool has_expired_certificates, bool full_refresh,
+                            bool repo_file_outdated);
+
 /// Call Varlink method that tries to refresh entitlement certificate(s),
 /// eventually try to get content override and releasever, when full refresh
 /// is enabled
