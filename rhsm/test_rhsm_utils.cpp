@@ -3,11 +3,17 @@
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #include "rhsm_utils.hpp"
 
@@ -387,60 +393,91 @@ TEST(ContainerDetectionTest, DoesNotCrash) {
 
 // --- refresh_content tests ---
 //
-// refresh_content() talks to the rhc Varlink service listening
-// on VARLINK_SOCKET_FILEPATH. In the unit-test environment there is no
-// functioning service that the test process can reach (the socket is either
-// absent, as in CI, or only accessible to root), so the VarlinkCTX constructor
-// fails to connect and the function reports the error by throwing
-// std::runtime_error. We cannot mock the service here, so these tests exercise
-// the observable behavior in that unavailable-service environment.
+// refresh_content() talks to the rhc Varlink service listening on
+// VARLINK_SOCKET_FILEPATH. When it connects successfully it performs a *real*
+// content refresh: it refreshes entitlement certificates, rewrites redhat.repo,
+// sets the release version and writes repository overrides. The unit tests must
+// never trigger that against a live service, and they can only assert the
+// error-handling path when the service is absent.
+//
+// Whether a refresh would really happen depends on whether the socket is
+// actually connectable, not on the user id: when the tests run as root (as they
+// do in CI, where they execute inside a container) a running service would be
+// reachable. We therefore probe the socket directly and skip the tests when it
+// is reachable, instead of silently asserting nothing based on getuid().
+
+namespace {
+    /// Return true when the rhc Varlink socket can be connected to.
+    ///
+    /// The probe only opens and immediately closes the connection; it never
+    /// sends a Varlink method call, so it has no effect on a running service.
+    bool varlink_socket_is_reachable() {
+        std::string_view endpoint = VARLINK_SOCKET_FILEPATH;
+        constexpr std::string_view unix_prefix = "unix:";
+        if (endpoint.starts_with(unix_prefix)) {
+            endpoint.remove_prefix(unix_prefix.size());
+        }
+
+        sockaddr_un addr{};
+        addr.sun_family = AF_UNIX;
+        // The path has to fit into sun_path together with its NUL terminator.
+        if (endpoint.size() >= sizeof(addr.sun_path)) {
+            return false;
+        }
+        std::memcpy(addr.sun_path, endpoint.data(), endpoint.size());
+
+        const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+        if (fd < 0) {
+            return false;
+        }
+
+        const bool reachable =
+            ::connect(fd, reinterpret_cast<const sockaddr *>(&addr), sizeof(addr)) == 0;
+        ::close(fd);
+        return reachable;
+    }
+}
 
 class RefreshEntitlementCertificatesTest : public ::testing::Test {
 protected:
     RefreshInfo refresh_info{};
 
     void SetUp() override {
-        // Pre-set every flag to true so we can prove the function resets the
-        // *_finished flags back to false before it attempts the refresh.
+        // Pre-set every *_finished flag to true so we can prove the function
+        // resets them back to false before it attempts the refresh.
         refresh_info.entitlement_cert_refresh_finished = true;
-        refresh_info.entitlement_cert_refresh_success = true;
         refresh_info.repo_overrides_refresh_finished = true;
-        refresh_info.repo_overrides_refresh_success = true;
         refresh_info.releasever_refresh_finished = true;
-        refresh_info.releasever_refresh_success = true;
     }
 };
 
 TEST_F(RefreshEntitlementCertificatesTest, NoVarlinkService_Throws) {
-    if (getuid() != 0) {
-        EXPECT_THROW(refresh_content(&refresh_info, false), std::runtime_error);
+    if (varlink_socket_is_reachable()) {
+        GTEST_SKIP() << "rhc Varlink service is reachable; skipping to avoid a real content refresh";
     }
+    EXPECT_THROW(refresh_content(&refresh_info, false), std::runtime_error);
 }
 
 TEST_F(RefreshEntitlementCertificatesTest, NoVarlinkService_ThrowsWithForce) {
-    if (getuid() != 0) {
-        EXPECT_THROW(refresh_content(&refresh_info, true), std::runtime_error);
+    if (varlink_socket_is_reachable()) {
+        GTEST_SKIP() << "rhc Varlink service is reachable; skipping to avoid a real content refresh";
     }
+    EXPECT_THROW(refresh_content(&refresh_info, true), std::runtime_error);
 }
 
 TEST_F(RefreshEntitlementCertificatesTest, ResetsFinishedFlagsBeforeConnecting) {
+    if (varlink_socket_is_reachable()) {
+        GTEST_SKIP() << "rhc Varlink service is reachable; skipping to avoid a real content refresh";
+    }
+
     // The function resets the *_finished flags to false as its first step,
     // before it tries to connect. Because the connection then fails and the
     // function throws before any reply callback runs, the flags stay false.
-    try {
-        refresh_content(&refresh_info, false);
-        if (getuid() != 0) {
-            FAIL() << "Expected refresh_content() to throw";
-        }
-    } catch (const std::runtime_error &) {
-        // Expected in the unit-test environment.
-    }
+    EXPECT_THROW(refresh_content(&refresh_info, false), std::runtime_error);
 
-    if (getuid() != 0) {
-        EXPECT_FALSE(refresh_info.entitlement_cert_refresh_finished);
-        EXPECT_FALSE(refresh_info.repo_overrides_refresh_finished);
-        EXPECT_FALSE(refresh_info.releasever_refresh_finished);
-    }
+    EXPECT_FALSE(refresh_info.entitlement_cert_refresh_finished);
+    EXPECT_FALSE(refresh_info.repo_overrides_refresh_finished);
+    EXPECT_FALSE(refresh_info.releasever_refresh_finished);
 }
 
 
