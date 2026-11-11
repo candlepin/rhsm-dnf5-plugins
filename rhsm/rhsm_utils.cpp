@@ -477,10 +477,22 @@ void VarlinkCTX::run_event_loop(const bool full_refresh) const
         }
 
         for (int i = 0; i < num_trig_events; i++) {
-            // Check if the event matches our Varlink file descriptor and is ready to read
-            if (events[i].data.fd == varlink_fd && (events[i].events & EPOLLIN)) {
+            // Only react to events on our Varlink file descriptor
+            if (events[i].data.fd != varlink_fd) {
+                continue;
+            }
 
-                // Tells libvarlink to parse the buffer stream and route to reply_callback()
+            // A hangup or error on the socket means the peer disconnected (or
+            // the connection broke) before all replies arrived. Fail promptly
+            // instead of spinning on the still-ready socket until the deadline.
+            if (events[i].events & (EPOLLHUP | EPOLLERR)) {
+                throw std::runtime_error(
+                    "Varlink connection closed before all replies were received");
+            }
+
+            // Ready to read: tell libvarlink to parse the buffer stream and
+            // route to reply_callback()
+            if (events[i].events & EPOLLIN) {
                 if (const long ret = varlink_connection_process_events(connection, events[i].events); ret < 0) {
                     throw std::runtime_error(std::format(
                             "Error processing wire frame data: {}", varlink_error_string(-ret))
