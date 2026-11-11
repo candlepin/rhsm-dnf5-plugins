@@ -11,9 +11,75 @@ jobs:
   build-rpms:
     uses: ./.github/workflows/rpmbuild.yml
 
+  # Build the rhc and rhc-server RPMs from the latest main branch of the
+  # RedHatInsights/rhc repository. The rhc rpmbuild workflow does not run on
+  # pushes to its main branch, so there are no main-branch artifacts to
+  # download. Instead we reproduce its build here (checkout main, build with
+  # the same "make rpm" target) and upload the resulting RPMs as artifacts
+  # under a dedicated name so they do not clash with this project's own RPMs.
+  build-rhc-rpms:
+    name: "Build rhc RPMs (${{ matrix.name }})"
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Fedora latest"
+            image: "registry.fedoraproject.org/fedora:latest"
+            slug: "fedora-latest"
+          - name: "Fedora Rawhide"
+            image: "registry.fedoraproject.org/fedora:rawhide"
+            slug: "fedora-rawhide"
+
+    container:
+      image: ${{ matrix.image }}
+
+    steps:
+      - name: "Try to update Fedora first"
+        if: matrix.slug == 'fedora-rawhide'
+        run: |
+          dnf -y clean all; dnf -y update || true
+
+      - name: "Install basic packages for 'dnf builddep'"
+        run: |
+          dnf --setopt install_weak_deps=False install -y \
+            git rpm-build go-vendor-tools go-rpm-macros
+
+      - name: "Checkout rhc main branch"
+        uses: actions/checkout@v7
+        with:
+          repository: RedHatInsights/rhc
+          ref: main
+          persist-credentials: false
+
+      - name: "Add repository directory as a safe directory"
+        run: |
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+      - name: "Install build dependencies from rhc.spec"
+        run: |
+          dnf --setopt install_weak_deps=False builddep -y rhc.spec
+
+      - name: "Build rhc RPMs"
+        run: |
+          make rpm
+
+      - name: "Collect rhc RPM artifacts"
+        run: |
+          mkdir -p rhc-rpms
+          cp ~/rpmbuild/RPMS/*/*.rpm rhc-rpms/
+
+      - name: "Upload rhc RPM artifacts"
+        uses: actions/upload-artifact@v7
+        with:
+          name: rhc-rpms-${{ matrix.slug }}
+          path: rhc-rpms/
+          retention-days: 30
+
   integration-tests:
     name: "Integration Tests (${{ matrix.name }})"
-    needs: build-rpms
+    needs: [build-rpms, build-rhc-rpms]
     runs-on: ubuntu-latest
 
     strategy:
@@ -23,9 +89,11 @@ jobs:
           - name: "Fedora latest"
             image: "registry.fedoraproject.org/fedora:latest"
             artifact: "rpms-fedora-latest"
+            rhc_artifact: "rhc-rpms-fedora-latest"
           - name: "Fedora Rawhide"
             image: "registry.fedoraproject.org/fedora:rawhide"
             artifact: "rpms-fedora-rawhide"
+            rhc_artifact: "rhc-rpms-fedora-rawhide"
 
     container:
       image: ${{ matrix.image }}
@@ -53,15 +121,25 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ./rpms
 
+      - name: "Download rhc RPM artifacts"
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.rhc_artifact }}
+          path: ./rhc-rpms
+
       - name: "Install test dependencies"
         run: |
           dnf --setopt install_weak_deps=False install -y \
-            subscription-manager rhc python3-behave dnf5-plugins openssl curl \
+            subscription-manager python3-behave dnf5-plugins openssl curl \
             dbus-daemon
 
       - name: "Install built RPMs"
         run: |
           dnf install -y ./rpms/*.rpm
+
+      - name: "Install rhc and rhc-server RPMs"
+        run: |
+          dnf install -y ./rhc-rpms/*.rpm
 
       - name: "Wait for candlepin to be ready"
         run: |
@@ -110,6 +188,26 @@ jobs:
           /usr/libexec/rhsm-service &
           sleep 2
           busctl --system status com.redhat.RHSM1
+
+      - name: "Start rhc-server Varlink service"
+        run: |
+          # The container has no systemd, so the rhc-server.socket unit cannot
+          # provide socket activation. Started on its own, rhc-server falls back
+          # to creating the Unix socket itself at /run/rhc/com.redhat.rhc, which
+          # is the Varlink endpoint the rhsm plugin connects to during a refresh.
+          mkdir -p /var/log/rhc
+          /usr/libexec/rhc/rhc-server > /var/log/rhc/rhc-server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if [ -S /run/rhc/com.redhat.rhc ]; then
+              echo "rhc-server Varlink socket is ready"
+              exit 0
+            fi
+            echo "Waiting for rhc-server Varlink socket... attempt $i/30"
+            sleep 1
+          done
+          echo "ERROR: rhc-server Varlink socket did not appear within timeout"
+          cat /var/log/rhc/rhc-server.log || true
+          exit 1
 
       - name: "Verify candlepin connectivity"
         run: |

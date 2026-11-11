@@ -3,14 +3,43 @@ This module contains environment setup and teardown functions for the test suite
 """
 
 import os
+import re
 import shutil
 import tempfile
+
+from behave.fixture import use_fixture, use_fixture_by_tag
+
+from fixtures import configure_rhsm_plugin_option, fixture_registry
+from steps.constants import (
+    EXPIRED_ENTITLEMENT_CERT_NAME,
+    EXPIRED_ENTITLEMENT_KEY_NAME,
+    DNF5_REDHAT_REPOS_OVERRIDE_FILE,
+)
+
+# Matches patterns like:
+#   fixture.configure_rhsm_plugin_option(config_option=full_refresh,value=true)
+CONFIGURE_RHSM_PLUGIN_OPTION_TAG_PATTERN = re.compile(
+    r"fixture\.configure_rhsm_plugin_option\((.+)\)"
+)
 
 ENTITLEMENT_CERT_DIR = "/etc/pki/entitlement/"
 ENTITLEMENT_BACKUP_DIR_PREFIX = "entitlement-backup-"
 RELEASEVER_FILE = "/etc/dnf/vars/releasever"
 RHSM_HOST_CONFIG_DIR = "/etc/rhsm-host"
 ENTITLEMENT_HOST_CERT_DIR = "/etc/pki/entitlement-host"
+
+MANAGED_FILE_BACKUP_DIR_PREFIX = "managed-file-backup-"
+
+# System files that integration scenarios -- or the rhsm plugin they exercise --
+# may create or modify. Any pre-existing copy is moved aside before each scenario
+# and restored afterwards, and any copy generated during the scenario (whether
+# written directly by a step or by the plugin during a refresh) is removed. This
+# keeps test state from leaking into later scenarios and leaves the system as it
+# was found, regardless of which actor created the file.
+MANAGED_FILES = (
+    RELEASEVER_FILE,
+    DNF5_REDHAT_REPOS_OVERRIDE_FILE,
+)
 
 
 def before_scenario(context, scenario) -> None:
@@ -24,6 +53,18 @@ def before_scenario(context, scenario) -> None:
     context.entitlement_backup_dir = tempfile.mkdtemp(
         prefix=ENTITLEMENT_BACKUP_DIR_PREFIX
     )
+
+    # Move aside any pre-existing managed files so the scenario starts from a
+    # known-clean state and the originals can be restored during teardown.
+    context.managed_file_backup_dir = tempfile.mkdtemp(
+        prefix=MANAGED_FILE_BACKUP_DIR_PREFIX
+    )
+    context.managed_file_backups = {}
+    for index, path in enumerate(MANAGED_FILES):
+        if os.path.isfile(path):
+            backup_path = os.path.join(context.managed_file_backup_dir, str(index))
+            shutil.move(path, backup_path)
+            context.managed_file_backups[path] = backup_path
 
 
 def after_scenario(context, scenario) -> None:
@@ -45,10 +86,26 @@ def after_scenario(context, scenario) -> None:
     if backup_dir:
         shutil.rmtree(backup_dir, ignore_errors=True)
 
-    if getattr(context, "_releasever_created", False):
-        if os.path.exists(RELEASEVER_FILE):
-            os.remove(RELEASEVER_FILE)
-        context._releasever_created = False
+    if getattr(context, "_expired_cert_installed", False):
+        for filename in (EXPIRED_ENTITLEMENT_CERT_NAME, EXPIRED_ENTITLEMENT_KEY_NAME):
+            filepath = os.path.join(ENTITLEMENT_CERT_DIR, filename)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        context._expired_cert_installed = False
+
+    # Remove any managed file generated during the scenario and restore the
+    # original that was moved aside in before_scenario, if there was one.
+    managed_backups = getattr(context, "managed_file_backups", {})
+    for path in MANAGED_FILES:
+        if os.path.isfile(path):
+            os.remove(path)
+        backup_path = managed_backups.get(path)
+        if backup_path and os.path.isfile(backup_path):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            shutil.move(backup_path, path)
+    managed_backup_dir = getattr(context, "managed_file_backup_dir", None)
+    if managed_backup_dir:
+        shutil.rmtree(managed_backup_dir, ignore_errors=True)
 
     if getattr(context, "_container_mode_active", False):
         for dirpath in [RHSM_HOST_CONFIG_DIR, ENTITLEMENT_HOST_CERT_DIR]:
@@ -85,3 +142,38 @@ def after_step(context, step) -> None:
             print(f"context stderr: {context.cmd_stderr}")
         # TODO: Print content of dnf5 log and rhsm log since
         #       the scenario was started
+
+
+def before_tag(context, tag) -> None:
+    """
+    This function is executed before each tag in the test suite.
+    It is used to activate fixtures based on tags.
+    :param context: Context object
+    :param tag: Tag string
+    :return: None
+    """
+    # Parameterized fixture that sets a config option in the rhsm plugin config file.
+    # The tag encodes the option and value as keyword arguments:
+    #   @fixture.configure_rhsm_plugin_option(config_option=full_refresh,value=true)
+    match = CONFIGURE_RHSM_PLUGIN_OPTION_TAG_PATTERN.match(tag)
+    if match:
+        # 1. Extract the raw string inside parentheses, e.g.
+        #    "config_option=full_refresh,value=true"
+        args_str = match.group(1)
+
+        # 2. Split by comma and separate key=value pairs into a dictionary
+        kwargs = {}
+        for pair in args_str.split(","):
+            if "=" in pair:
+                key, val = pair.split("=", 1)
+                # Clean up whitespace or stray quotes
+                key = key.strip()
+                val = val.strip().strip("'\"")
+                kwargs[key] = val
+
+        # 3. Inject the fixture dynamically using the unpacked kwargs
+        return use_fixture(configure_rhsm_plugin_option, context, **kwargs)
+
+    if tag.startswith("fixture."):
+        return use_fixture_by_tag(tag, context, fixture_registry)
+    return None

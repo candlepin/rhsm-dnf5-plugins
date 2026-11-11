@@ -33,6 +33,12 @@ pkg_check_modules(OPENSSL REQUIRED IMPORTED_TARGET libcrypto libssl)
 pkg_check_modules(JSONCPP REQUIRED IMPORTED_TARGET jsoncpp)
 pkg_check_modules(LIBDNF5 REQUIRED IMPORTED_TARGET libdnf5)
 
+# libvarlink and uuid are only needed by the rhsm plugin
+if(WITH_PLUGIN_RHSM)
+    pkg_check_modules(LIBVARLINK REQUIRED IMPORTED_TARGET libvarlink)
+    pkg_check_modules(UUID REQUIRED IMPORTED_TARGET uuid)
+endif()
+
 
 # Enable testing in our project
 enable_testing()
