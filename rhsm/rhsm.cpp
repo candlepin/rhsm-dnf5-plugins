@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstring>
 #include <iostream>
+#include <utility>
 #include <unistd.h>
 #include <openssl/x509.h>
 
@@ -38,6 +39,21 @@ namespace {
 
     private:
         BgettextMessage text;
+    };
+
+    /// Class for displaying simple messages without any argument.
+    class RhsmParamMessage : public Message {
+    public:
+        RhsmParamMessage() : text(), param() {}
+        explicit RhsmParamMessage(const BgettextMessage text, std::string param) : text(text), param(std::move(param)) {}
+
+        std::string format(const bool translate, const utils::Locale * locale) const override {
+            return utils::format(locale, translate, text, 1, param);
+        }
+
+    private:
+        BgettextMessage text;
+        std::string param;
     };
 
     /// Class for displaying message with no installed entitlement certificate.
@@ -273,21 +289,26 @@ namespace {
             base::InteractionCallbacks::ProgressState::NEW,
             &start_msg, 0, 10);
 
-        try {
+        auto end_state = libdnf5::base::InteractionCallbacks::ProgressState::END_OK;
+        RhsmParamMessage end_msg;
+        try
+        {
             refresh_content(&refresh_info, full_refresh);
+            if (refresh_info.entitlement_cert_up_to_date) {
+                end_msg = RhsmParamMessage(M_("current entitlement certificate is up to date"), "");
+            } else {
+                end_msg = RhsmParamMessage(M_("updated entitlement certificate: {}"), refresh_info.entitlement_cert_file_path);
+            }
         } catch (std::runtime_error &e) {
             error_log("Failed to refresh entitlement certificates: {}", e.what());
+            end_msg = RhsmParamMessage(M_("failed to update content: {}"), e.what());
+            end_state = libdnf5::base::InteractionCallbacks::ProgressState::END_ERROR;
         }
 
-        debug_log("Entitlement certificates refresh finished {}",
-            refresh_info.entitlement_cert_refresh_finished ? "success" : "failure");
-        // TODO: dnf5 does not print progress messages as expected. Call following method, whe
-        //       the dnf dnf5 CLI tool will be fixed and we will be able to verify behavior.
-        // RhsmSimpleMessage const end_msg = RhsmSimpleMessage(M_("certificate updated"));
         get_base().progress(
-            handle,
-            libdnf5::base::InteractionCallbacks::ProgressState::END_OK,
-            nullptr, 10, 10);
+                handle,
+                end_state,
+                &end_msg, 10, 10);
     }
 
     // Print warning and info messages about subscription status.

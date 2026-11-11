@@ -29,13 +29,12 @@ constexpr const char * ENTITLEMENT_HOST_CERT_DIR = "/etc/pki/entitlement-host";
 /// * releasever
 typedef struct RefreshInfo {
     bool entitlement_cert_refresh_finished;
-    bool entitlement_cert_refresh_success;
+    bool entitlement_cert_updated;
+    bool entitlement_cert_up_to_date;
     std::string entitlement_cert_file_path;
     std::string entitlement_key_file_path;
     bool repo_overrides_refresh_finished;
-    bool repo_overrides_refresh_success;
     bool releasever_refresh_finished;
-    bool releasever_refresh_success;
 } RefreshInfo;
 
 /// RAII wrapper holding information about the current Varlink context.

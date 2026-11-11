@@ -85,13 +85,11 @@ static long refresh_reply_callback(VarlinkConnection *connection,
 
     if (error) {
         if (strcmp(error, "com.redhat.rhsm.testing.content.CertificateUpToDate") == 0) {
-            refresh_info->entitlement_cert_refresh_success = true;
+            refresh_info->entitlement_cert_up_to_date = true;
         } else {
             throw std::runtime_error(std::format("Error received: {}", error));
         }
     }
-
-    refresh_info->entitlement_cert_refresh_success = true;
 
     // The reply carries a "result" object holding the paths of the refreshed
     // entitlement certificate and its key. Parse them and store them in
@@ -132,8 +130,6 @@ static long write_override_reply_callback(VarlinkConnection *connection,
     if (error) {
         throw std::runtime_error(std::format("Error received: {}", error));
     }
-
-    refresh_info->repo_overrides_refresh_success = true;
 
     return true;
 }
@@ -184,8 +180,6 @@ static long set_releasever_reply_callback(VarlinkConnection *connection,
         throw std::runtime_error(std::format("Error received: {}", error));
     }
 
-    refresh_info->releasever_refresh_success = true;
-
     return true;
 }
 
@@ -214,7 +208,6 @@ static long download_releasever_reply_callback(VarlinkConnection *connection,
         } else {
             // When release was not set, then we can finish activity related to release
             refresh_info->releasever_refresh_finished = true;
-            refresh_info->releasever_refresh_success = true;
         }
     } else {
         throw std::runtime_error(
@@ -363,7 +356,7 @@ void VarlinkCTX::call_override_write_content(VarlinkArray *content_overrides) co
     varlink_object_set_object(parameters, "metadata", metadata);
 
     // Try to call the Varlink method
-    const long download_override_res = varlink_connection_call(
+    const long write_override_res = varlink_connection_call(
         connection,
         "com.redhat.rhsm.testing.content.override.WriteContentOverrides",
         parameters,
@@ -374,9 +367,9 @@ void VarlinkCTX::call_override_write_content(VarlinkArray *content_overrides) co
     varlink_object_unref(metadata);
     varlink_object_unref(parameters);
 
-    if (download_override_res < 0) {
+    if (write_override_res < 0) {
         throw std::runtime_error(std::format("Call com.redhat.rhsm.testing.content.override.WriteContentOverrides() failed: {}",
-                                             varlink_error_string(-download_override_res)));
+                                             varlink_error_string(-write_override_res)));
     }
 }
 
@@ -392,7 +385,7 @@ void VarlinkCTX::call_release_set(const std::string& release) const
     varlink_object_set_object(parameters, "metadata", metadata);
 
     // Try to call the Varlink method
-    const long download_release_res = varlink_connection_call(
+    const long set_release_res = varlink_connection_call(
         connection,
         "com.redhat.rhsm.testing.content.release.SetRelease",
         parameters,
@@ -403,9 +396,9 @@ void VarlinkCTX::call_release_set(const std::string& release) const
     varlink_object_unref(metadata);
     varlink_object_unref(parameters);
 
-    if (download_release_res < 0) {
+    if (set_release_res < 0) {
         throw std::runtime_error(std::format("Call com.redhat.rhsm.testing.content.release.SetRelease() failed: {}",
-                                             varlink_error_string(-download_release_res)));
+                                             varlink_error_string(-set_release_res)));
     }
 }
 
