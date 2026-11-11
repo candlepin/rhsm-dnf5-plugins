@@ -234,15 +234,46 @@ def step_impl(context: behave.runner.Context):
     json_output = json.loads(result.stdout)
     consumer_uuid = json_output["data"][0]
 
-    # Make REST API call to set testing conten overrides
-    body = context.text
+    # Make REST API call to set testing content overrides
+    overrides = json.loads(context.text)
     url = f"https://{hostname}:{port}{prefix}/consumers/{consumer_uuid}/content_overrides"
     response = requests.put(
         url,
         auth=('admin', 'admin'),
         verify=False,
         headers={'Content-Type': 'application/json'},
-        data=body
+        data=context.text
+    )
+    response.raise_for_status()
+
+    # The overrides are stored on the (possibly reused) candlepin consumer, so
+    # they would leak into later scenarios or test runs. Register a teardown that
+    # removes exactly the overrides this step added once the scenario finishes
+    # (behave runs registered cleanups even if the scenario fails).
+    context.add_cleanup(_remove_content_overrides, url, overrides)
+
+
+def _remove_content_overrides(url, overrides):
+    """
+    Delete the given content overrides from the candlepin consumer. Candlepin
+    identifies an override to remove by its content label and name, so only the
+    overrides set by the test are removed.
+    :param url: content_overrides endpoint of the consumer
+    :param overrides: list of override dicts as sent to the server
+    :return: None
+    """
+    delete_body = json.dumps(
+        [
+            {"contentLabel": override["contentLabel"], "name": override["name"]}
+            for override in overrides
+        ]
+    )
+    response = requests.delete(
+        url,
+        auth=('admin', 'admin'),
+        verify=False,
+        headers={'Content-Type': 'application/json'},
+        data=delete_body,
     )
     response.raise_for_status()
 
