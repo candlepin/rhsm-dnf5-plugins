@@ -140,6 +140,11 @@ def after_step(context, step) -> None:
             print(f"context stdout: {context.cmd_stdout}")
         if hasattr(context, "cmd_stderr") and context.cmd_stderr:
             print(f"context stderr: {context.cmd_stderr}")
+        if os.path.exists("/var/log/rhc/rhc-server.log"):
+            with open("/var/log/rhc/rhc-server.log", "r") as rhc_server_log:
+                print("rhc-server.log:")
+                print(rhc_server_log.read())
+
         # TODO: Print content of dnf5 log and rhsm log since
         #       the scenario was started
 
