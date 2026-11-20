@@ -39,10 +39,10 @@ namespace {
         BgettextMessage text;
     };
 
-    /// Class for displaying simple messages without any argument.
+    /// Class for displaying simple messages with a string argument.
     class RhsmParamMessage : public Message {
     public:
-        RhsmParamMessage() : text(), param() {}
+        RhsmParamMessage() : text() {}
         explicit RhsmParamMessage(const BgettextMessage text, std::string param) : text(text), param(std::move(param)) {}
 
         std::string format(const bool translate, const utils::Locale * locale) const override {
@@ -175,7 +175,7 @@ namespace {
                     expired = get_expired_entitlement_certificates(ENTITLEMENT_CERT_DIR);
 
                     // Try to get "full_refresh" configuration option from configuration file of this plugin
-                    auto full_refresh = false;
+                    bool full_refresh = false;
                     if (config.has_option("main", "full_refresh")) {
                         full_refresh = is_full_refresh_enabled(config.get_value("main", "full_refresh"));
                     }
