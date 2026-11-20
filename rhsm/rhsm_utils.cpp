@@ -512,6 +512,7 @@ void refresh_content(RefreshInfo *refresh_info, const bool full_refresh) {
     refresh_info->entitlement_cert_refresh_finished = false;
     refresh_info->repo_overrides_refresh_finished = false;
     refresh_info->releasever_refresh_finished = false;
+    refresh_info->entitlement_cert_up_to_date = false;
 
     // The constructor connects to the Varlink service and sets up epoll; the
     // destructor releases both, even when one of the calls below throws.

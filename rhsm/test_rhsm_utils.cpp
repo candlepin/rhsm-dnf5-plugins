@@ -500,6 +500,7 @@ protected:
         refresh_info.entitlement_cert_refresh_finished = true;
         refresh_info.repo_overrides_refresh_finished = true;
         refresh_info.releasever_refresh_finished = true;
+        refresh_info.entitlement_cert_up_to_date = true;
     }
 };
 
@@ -530,6 +531,7 @@ TEST_F(RefreshEntitlementCertificatesTest, ResetsFinishedFlagsBeforeConnecting) 
     EXPECT_FALSE(refresh_info.entitlement_cert_refresh_finished);
     EXPECT_FALSE(refresh_info.repo_overrides_refresh_finished);
     EXPECT_FALSE(refresh_info.releasever_refresh_finished);
+    EXPECT_FALSE(refresh_info.entitlement_cert_up_to_date);
 }
 
 
