@@ -97,19 +97,32 @@ jobs:
 
     container:
       image: ${{ matrix.image }}
+      options: --volume /var/run/docker.sock:/var/run/docker.sock
 
+    # candlepin-db, candlepin-app and candlepin-repo run as plain service
+    # containers. candlepin-repo now has its OWN hostname (candlepin-repo) and its
+    # own independent CA/server cert (SAN DNS:candlepin-repo), so it no longer has
+    # to masquerade as "candlepin" and can be a normal service.
+    #
+    # candlepin-proxy is the only container that still needs candlepin-app's
+    # network namespace: its nginx forwards to candlepin over http://127.0.0.1:8080
+    # and it must answer on 8443 as the hostname "candlepin". It is attached in a
+    # later step (see "Start candlepin-proxy ...") via the mounted docker socket.
+    # The candlepin service publishes 8443 on behalf of the proxy in its netns.
     services:
       postgres:
         image: ghcr.io/candlepin/candlepin-db:latest
       candlepin:
         image: ghcr.io/candlepin/candlepin-app:latest
-        options: --hostname candlepin.local
+        options: --hostname candlepin
         ports:
           - 8443:8443
       candlepin-repo:
         image: ghcr.io/candlepin/candlepin-repo:latest
+        options: --hostname candlepin-repo
         ports:
-          - 8080:8080
+          - 9080:9080
+          - 9443:9443
 
     steps:
       - name: "Checkout repository"
@@ -132,6 +145,14 @@ jobs:
           dnf --setopt install_weak_deps=False install -y \
             subscription-manager python3-behave dnf5-plugins openssl curl \
             dbus-daemon
+          # Install docker CLI to drive the host's docker daemon (the container
+          # job mounts /var/run/docker.sock) for copying the CA bundle and for
+          # attaching the proxy/repo into candlepin-app's network namespace.
+          if ! command -v docker >/dev/null 2>&1; then
+            dnf --setopt install_weak_deps=False install -y moby-engine || \
+              dnf --setopt install_weak_deps=False install -y docker-cli || \
+              dnf --setopt install_weak_deps=False install -y docker || true
+          fi
 
       - name: "Install built RPMs"
         run: |
@@ -141,19 +162,81 @@ jobs:
         run: |
           dnf install -y ./rhc-rpms/*.rpm
 
+      - name: "Start candlepin-proxy in the candlepin netns"
+        run: |
+          # Attach only the proxy into candlepin-app's network namespace so it
+          # shares its localhost (proxy_pass http://127.0.0.1:8080) and its
+          # "candlepin" hostname/IP on 8443. GitHub Actions services: cannot express
+          # "join another container's netns", so we do it here via the docker socket.
+          CANDLEPIN_CID=$(docker ps \
+            --filter "ancestor=ghcr.io/candlepin/candlepin-app:latest" \
+            --format "{{.ID}}" | head -n1)
+          if [ -z "$CANDLEPIN_CID" ]; then
+            echo "ERROR: candlepin-app container not found"
+            docker ps -a || true
+            exit 1
+          fi
+
+          docker rm -f candlepin-proxy >/dev/null 2>&1 || true
+
+          docker run -d --name candlepin-proxy \
+            --network "container:${CANDLEPIN_CID}" \
+            ghcr.io/candlepin/candlepin-proxy:latest
+
+          echo "Attached proxy into candlepin-app netns (${CANDLEPIN_CID})"
+          docker ps
+
       - name: "Wait for candlepin to be ready"
         run: |
-          for i in $(seq 1 60); do
+          for i in $(seq 1 12); do
             if curl -sfk https://candlepin:8443/candlepin/status > /dev/null 2>&1; then
               echo "Candlepin is ready"
               curl -sk https://candlepin:8443/candlepin/status
               exit 0
             fi
-            echo "Waiting for candlepin... attempt $i/60"
+            echo "Waiting for candlepin... attempt $i/12"
             sleep 5
           done
+          curl -vk https://candlepin:8443/candlepin/status
+          echo "---- candlepin-proxy logs ----"; docker logs candlepin-proxy 2>&1 | tail -30 || true
+          echo "---- candlepin-app logs ----";   docker logs "$(docker ps -q --filter ancestor=ghcr.io/candlepin/candlepin-app:latest | head -n1)" 2>&1 | tail -30 || true
           echo "ERROR: Candlepin failed to start within timeout"
           exit 1
+
+      - name: "Trust candlepin and repo TLS certificates"
+        run: |
+          # candlepin-app (API) and candlepin-repo use SEPARATE CAs, so import
+          # both via the mounted docker socket:
+          #   * candlepin's bundle (RSA + ML-DSA) from the candlepin-app container, and
+          #   * candlepin-repo's own CA from the candlepin-repo container.
+          mkdir -p /etc/rhsm/ca
+
+          CANDLEPIN_CONTAINER=$(docker ps --filter "ancestor=ghcr.io/candlepin/candlepin-app:latest" --format "{{.ID}}" 2>/dev/null | head -n1 || true)
+          if [ -z "$CANDLEPIN_CONTAINER" ]; then
+            CANDLEPIN_CONTAINER=$(docker ps --format "{{.ID}} {{.Image}}" 2>/dev/null | grep -m1 "candlepin-app" | awk '{print $1}' || true)
+          fi
+          REPO_CONTAINER=$(docker ps --filter "ancestor=ghcr.io/candlepin/candlepin-repo:latest" --format "{{.ID}}" 2>/dev/null | head -n1 || true)
+          if [ -z "$REPO_CONTAINER" ]; then
+            REPO_CONTAINER=$(docker ps --format "{{.ID}} {{.Image}}" 2>/dev/null | grep -m1 "candlepin-repo" | awk '{print $1}' || true)
+          fi
+          if [ -z "$CANDLEPIN_CONTAINER" ] || [ -z "$REPO_CONTAINER" ]; then
+            echo "ERROR: candlepin-app or candlepin-repo container not found"
+            docker ps -a 2>&1 || true
+            exit 1
+          fi
+
+          docker cp "$CANDLEPIN_CONTAINER:/etc/candlepin/certs/candlepin-ca-bundle.crt" /etc/rhsm/ca/candlepin-ca-bundle.pem
+          docker cp "$REPO_CONTAINER:/etc/pki/tls/certs/candlepin-repo-ca.crt" /etc/rhsm/ca/candlepin-repo-ca.pem
+
+          ln -sf /etc/rhsm/ca/candlepin-ca-bundle.pem /etc/pki/ca-trust/source/anchors/candlepin-ca-bundle.pem
+          ln -sf /etc/rhsm/ca/candlepin-repo-ca.pem   /etc/pki/ca-trust/source/anchors/candlepin-repo-ca.pem
+          update-ca-trust
+          chown root:root /etc/rhsm/ca/candlepin-ca-bundle.pem /etc/rhsm/ca/candlepin-repo-ca.pem || true
+          if command -v restorecon >/dev/null 2>&1; then
+            restorecon -v /etc/rhsm/ca/candlepin-ca-bundle.pem /etc/rhsm/ca/candlepin-repo-ca.pem || true
+          fi
+          curl -sSf https://candlepin:8443/candlepin/status > /dev/null
+          curl -sSf https://candlepin-repo:9443/RPM-GPG-KEY-candlepin > /dev/null
 
       - name: "Configure subscription-manager for candlepin"
         run: |
@@ -161,21 +244,13 @@ jobs:
             --server.hostname candlepin \
             --server.port 8443 \
             --server.prefix /candlepin \
-            --server.insecure 1 \
-            --rhsm.baseurl http://candlepin-repo:8080
-
-      - name: "Trust candlepin TLS certificate"
-        run: |
-          openssl s_client -connect candlepin:8443 -showcerts </dev/null 2>/dev/null \
-            | openssl x509 -outform PEM > /etc/rhsm/ca/candlepin-ca.pem
-          ln -sf /etc/rhsm/ca/candlepin-ca.pem \
-            /etc/pki/ca-trust/source/anchors/candlepin-ca.pem
-          update-ca-trust
+            --rhsm.baseurl https://candlepin-repo:9443 \
+            --rhsm.repo_ca_cert /etc/rhsm/ca/candlepin-repo-ca.pem
 
       - name: "Import candlepin RPM GPG key"
         run: |
-          curl -sf http://candlepin-repo:8080/RPM-GPG-KEY-candlepin \
-            > /etc/pki/rpm-gpg/RPM-GPG-KEY-candlepin
+          curl -sf https://candlepin-repo:9443/RPM-GPG-KEY-candlepin \
+            > /etc/pki/rpm-gpg/RPM-GPG-KEY-candlepin || curl -v https://candlepin-repo:9443/RPM-GPG-KEY-candlepin
 
       - name: "Start D-Bus system bus"
         run: |
