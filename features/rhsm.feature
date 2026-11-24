@@ -73,7 +73,7 @@ Feature: RHSM plugin info and warning messages
   # against Satellite
 
   @fixture.configure_rhsm_plugin_option(config_option=full_refresh,value=true)
-  Scenario: Entitlement certificate is not refreshed, when certificate is up to date
+  Scenario: Entitlement certificate is not refreshed, when certificate is up to date (full_refresh)
     Given system is registered against candlepin server
     Given entitlement certificate is installed
     When dnf5 command is run
@@ -82,7 +82,7 @@ Feature: RHSM plugin info and warning messages
 
 
   @fixture.configure_rhsm_plugin_option(config_option=full_refresh,value=true)
-  Scenario: Entitlement certificate is refreshed, when certificate has been regenerated on candlepin server
+  Scenario: Entitlement certificate is refreshed, when certificate has been regenerated (full_refresh)
     Given system is registered against candlepin server
     Given entitlement certificate is installed
     Given entitlement certificate is regenerated on candlepin server
@@ -100,7 +100,7 @@ Feature: RHSM plugin info and warning messages
 
 
   @fixture.configure_rhsm_plugin_option(config_option=full_refresh,value=true)
-  Scenario: Releasever is set, when releasever is set server side
+  Scenario: Releasever is set, when releasever is set server side (full_refresh)
     Given system is registered against candlepin server
     Given releasever file does not exists
     And release is set to "44" server side
@@ -114,7 +114,7 @@ Feature: RHSM plugin info and warning messages
 
 
   @fixture.configure_rhsm_plugin_option(config_option=full_refresh,value=true)
-  Scenario: Repo override is set, when content override is set server side
+  Scenario: Repo override is set, when content override is set server side (full_refresh)
     Given system is registered against candlepin server
     Given redhat repo override file does not exists
     And content override is set server side
