@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <format>
 #include <fstream>
 #include <iostream>
@@ -349,13 +350,9 @@ void VarlinkCTX::call_override_download() const
 void VarlinkCTX::call_override_write_content(VarlinkArray *content_overrides) const
 {
     VarlinkObject *parameters = nullptr;
-    VarlinkObject *metadata = nullptr;
 
     varlink_object_new(&parameters);
-    varlink_object_new(&metadata);
-    initialize_metadata(metadata);
     varlink_object_set_array(parameters, "content_overrides", content_overrides);
-    varlink_object_set_object(parameters, "metadata", metadata);
 
     // Try to call the Varlink method
     const long write_override_res = varlink_connection_call(
@@ -366,12 +363,12 @@ void VarlinkCTX::call_override_write_content(VarlinkArray *content_overrides) co
         write_override_reply_callback,
         const_cast<VarlinkCTX *>(this)
     );
-    varlink_object_unref(metadata);
     varlink_object_unref(parameters);
 
     if (write_override_res < 0) {
-        throw std::runtime_error(std::format("Call com.redhat.rhsm.testing.content.override.WriteContentOverrides() failed: {}",
-                                             varlink_error_string(-write_override_res)));
+        throw std::runtime_error(
+            std::format("Call com.redhat.rhsm.testing.content.override.WriteContentOverrides() failed: {}",
+                varlink_error_string(-write_override_res)));
     }
 }
 

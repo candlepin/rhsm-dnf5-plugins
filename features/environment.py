@@ -11,6 +11,11 @@ from behave.fixture import use_fixture, use_fixture_by_tag
 
 from fixtures import configure_rhsm_plugin_option, fixture_registry
 from steps.constants import (
+    ENTITLEMENT_CERT_DIR,
+    ENTITLEMENT_BACKUP_DIR_PREFIX,
+    RHSM_HOST_CONFIG_DIR,
+    RELEASEVER_FILE,
+    ENTITLEMENT_HOST_CERT_DIR,
     EXPIRED_ENTITLEMENT_CERT_NAME,
     EXPIRED_ENTITLEMENT_KEY_NAME,
     DNF5_REDHAT_REPOS_OVERRIDE_FILE,
@@ -22,11 +27,6 @@ CONFIGURE_RHSM_PLUGIN_OPTION_TAG_PATTERN = re.compile(
     r"fixture\.configure_rhsm_plugin_option\((.+)\)"
 )
 
-ENTITLEMENT_CERT_DIR = "/etc/pki/entitlement/"
-ENTITLEMENT_BACKUP_DIR_PREFIX = "entitlement-backup-"
-RELEASEVER_FILE = "/etc/dnf/vars/releasever"
-RHSM_HOST_CONFIG_DIR = "/etc/rhsm-host"
-ENTITLEMENT_HOST_CERT_DIR = "/etc/pki/entitlement-host"
 
 MANAGED_FILE_BACKUP_DIR_PREFIX = "managed-file-backup-"
 
